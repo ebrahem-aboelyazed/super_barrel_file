@@ -84,13 +84,6 @@
                           relative-to-action="DartBarrel.GenerateBarrel"/>
         </action>
 
-        <action id="DartBarrel.BulkGenerate"
-                class="com.dartbarrel.plugin.actions.BulkGenerateAction"
-                text="Generate Barrel Files (Bulk)"
-                description="Generate barrel files for all subdirectories">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
-                          relative-to-action="DartBarrel.RegenerateBarrel"/>
-        </action>
 
         <action id="DartBarrel.Settings"
                 class="com.dartbarrel.plugin.actions.SettingsAction"

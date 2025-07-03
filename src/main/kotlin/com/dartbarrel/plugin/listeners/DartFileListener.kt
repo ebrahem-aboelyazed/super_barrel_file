@@ -66,7 +66,6 @@ class DartFileListener : AsyncFileListener {
                         }
                     }
 
-                    // Also handle old directory for move events
                     if (event is VFileMoveEvent) {
                         event.oldParent?.let { oldParent ->
                             val psiDirectory = com.intellij.psi.PsiManager.getInstance(project)
