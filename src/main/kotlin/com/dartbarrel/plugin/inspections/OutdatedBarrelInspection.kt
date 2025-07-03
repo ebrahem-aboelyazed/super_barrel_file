@@ -4,6 +4,7 @@ package com.dartbarrel.plugin.inspections
 import com.dartbarrel.plugin.services.DartBarrelService
 import com.intellij.codeInspection.*
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiFile
 import com.jetbrains.lang.dart.psi.DartFile
@@ -18,9 +19,9 @@ class OutdatedBarrelInspection : LocalInspectionTool() {
                 val barrelService = file.project.service<DartBarrelService>()
                 if (!barrelService.isBarrelFile(file.virtualFile)) return
 
-                val directory = file.containingDirectory ?: return
+                file.containingDirectory ?: return
 
-                if (barrelService.needsRegeneration(directory)) {
+                if (barrelService.needsRegeneration(file)) {
                     val fix = RegenerateBarrelQuickFix()
                     holder.registerProblem(
                         file,
@@ -38,12 +39,10 @@ class OutdatedBarrelInspection : LocalInspectionTool() {
 
         override fun getFamilyName(): String = "Dart Barrel"
 
-        override fun applyFix(project: com.intellij.openapi.project.Project, descriptor: ProblemDescriptor) {
+        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val file = descriptor.psiElement as? PsiFile ?: return
-            val directory = file.containingDirectory ?: return
             val barrelService = project.service<DartBarrelService>()
-
-            barrelService.generateBarrelFile(directory)
+            barrelService.regenerateBarrelFileForFile(file)
         }
     }
 }

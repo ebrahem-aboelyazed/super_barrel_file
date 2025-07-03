@@ -112,13 +112,27 @@ class DartBarrelService(private val project: Project) {
         return lines.isNotEmpty() && lines.all { it.startsWith("export ") && it.endsWith(";") }
     }
 
-    fun needsRegeneration(directory: PsiDirectory): Boolean {
+    fun needsRegeneration(barrelFile: PsiFile): Boolean {
+        val directory = barrelFile.containingDirectory ?: return false
         val dartFiles = DartFileUtils.getAllDartFilesRecursively(directory)
-        val barrelFileName = getBarrelFileName(directory)
-        val barrelFile = directory.files.find { it.name == barrelFileName }
-        if (barrelFile == null) return true
+            .filter { it.name != barrelFile.name }
         val expectedContent = buildBarrelContentWithRelativePaths(dartFiles, directory)
         return expectedContent != barrelFile.text
+    }
+
+    fun regenerateBarrelFileForFile(barrelFile: PsiFile) {
+        val directory = barrelFile.containingDirectory ?: return
+        val dartFiles = DartFileUtils.getAllDartFilesRecursively(directory)
+            .filter { it.name != barrelFile.name }
+        val content = buildBarrelContentWithRelativePaths(dartFiles, directory)
+        ApplicationManager.getApplication().runWriteAction {
+            val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
+                .getDocument(barrelFile.virtualFile)
+            if (document != null) {
+                document.setText(content)
+                com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
+            }
+        }
     }
 
     private fun isPrivateFile(file: PsiFile): Boolean {
