@@ -10,9 +10,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiManager
 
 class RegenerateBarrelAction : AnAction() {
@@ -20,61 +17,37 @@ class RegenerateBarrelAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+        if (virtualFile.isDirectory) return
 
-        if (!virtualFile.isDirectory) return
+        val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return
+        val barrelService = project.service<DartBarrelService>()
 
-        val psiDirectory = PsiManager.getInstance(project).findDirectory(virtualFile) ?: return
-
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Generating barrel files", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Regenerating barrel file", true) {
             override fun run(indicator: ProgressIndicator) {
-                val count = generateBarrelFilesRecursively(project, psiDirectory, indicator)
+                barrelService.regenerateBarrelFileForFile(psiFile)
                 NotificationUtils.showInfo(
                     project,
-                    "Bulk Generation Complete",
-                    "Generated $count barrel file(s) in ${psiDirectory.name} and subdirectories"
+                    "Barrel File Regenerated",
+                    "Regenerated ${psiFile.name}"
                 )
             }
         })
-    }
-
-    // Recursively generate for all subdirectories
-    private fun generateBarrelFilesRecursively(
-        project: Project,
-        directory: PsiDirectory,
-        indicator: ProgressIndicator
-    ): Int {
-        val barrelService = project.service<DartBarrelService>()
-        var count = 0
-
-        indicator.text = "Generating barrel file in ${directory.name}..."
-        indicator.isIndeterminate = false
-
-        if (barrelService.generateBarrelFile(directory) != null) {
-            count++
-        }
-        directory.subdirectories.forEach { subdir ->
-            count += generateBarrelFilesRecursively(project, subdir, indicator)
-        }
-        return count
     }
 
     override fun update(e: AnActionEvent) {
         val project = e.project
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
 
-        e.presentation.isEnabledAndVisible = project != null &&
+        val isBarrel = project != null &&
                 virtualFile != null &&
-                virtualFile.isDirectory &&
-                isDartProject(project)
+                !virtualFile.isDirectory &&
+                virtualFile.fileType.name == "Dart" &&
+                project.service<DartBarrelService>().isBarrelFile(virtualFile)
+
+        e.presentation.isEnabledAndVisible = isBarrel
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.BGT
-    }
-
-    private fun isDartProject(project: Project): Boolean {
-        val basePath = project.basePath
-        val dir = basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
-        return dir?.findChild("pubspec.yaml") != null
     }
 }

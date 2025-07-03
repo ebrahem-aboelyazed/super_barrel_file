@@ -16,7 +16,6 @@
             <li>Initial release</li>
             <li>Auto-generate barrel files with folder names</li>
             <li>Smart export detection</li>
-            <li>Bulk operations support</li>
             <li>Real-time file monitoring</li>
         </ul>
     ]]></change-notes>
@@ -44,13 +43,13 @@
         <vfs.asyncListener implementation="com.dartbarrel.plugin.listeners.DartFileListener"/>
 
         <!-- Inspections -->
-       <!-- <localInspection
-                language="Dart"
-                displayName="Missing Barrel File"
-                groupName="Dart Barrel"
-                enabledByDefault="true"
-                level="WEAK WARNING"
-                implementationClass="com.dartbarrel.plugin.inspections.MissingBarrelInspection"/>-->
+        <!-- <localInspection
+                 language="Dart"
+                 displayName="Missing Barrel File"
+                 groupName="Dart Barrel"
+                 enabledByDefault="true"
+                 level="WEAK WARNING"
+                 implementationClass="com.dartbarrel.plugin.inspections.MissingBarrelInspection"/>-->
 
         <localInspection
                 language="Dart"
@@ -68,20 +67,20 @@
     </extensions>
 
     <actions>
-        <action id="DartBarrel.GenerateBarrel"
+        <action id="com.dartbarrel.plugin.actions.GenerateBarrelAction"
                 class="com.dartbarrel.plugin.actions.GenerateBarrelAction"
-                text="Generate Barrel File"
-                description="Generate barrel file for selected directory">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="NewGroup"/>
-            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="RefactoringMenu"/>
+                text="Barrel File"
+                description="Generate a Dart barrel file"
+                icon="DartIcons.Dart_file">
+            <add-to-group group-id="NewGroup" anchor="last"/>
         </action>
 
         <action id="DartBarrel.RegenerateBarrel"
                 class="com.dartbarrel.plugin.actions.RegenerateBarrelAction"
-                text="Regenerate Barrel File"
+                text="Refresh Barrel File"
                 description="Regenerate existing barrel file">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
-                          relative-to-action="DartBarrel.GenerateBarrel"/>
+                          relative-to-action="com.dartbarrel.plugin.actions.GenerateBarrelAction"/>
         </action>
 
 
@@ -92,13 +91,6 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
-        <group id="DartBarrelGroup" text="Dart Barrel" popup="true">
-            <reference ref="DartBarrel.GenerateBarrel"/>
-            <reference ref="DartBarrel.RegenerateBarrel"/>
-            <separator/>
-            <reference ref="DartBarrel.BulkGenerate"/>
-            <separator/>
-            <reference ref="DartBarrel.Settings"/>
-        </group>
+
     </actions>
 </idea-plugin>

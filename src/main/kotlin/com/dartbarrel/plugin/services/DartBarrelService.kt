@@ -121,18 +121,24 @@ class DartBarrelService(private val project: Project) {
     }
 
     fun regenerateBarrelFileForFile(barrelFile: PsiFile) {
-        val directory = barrelFile.containingDirectory ?: return
-        val dartFiles = DartFileUtils.getAllDartFilesRecursively(directory)
-            .filter { it.name != barrelFile.name }
-        val content = buildBarrelContentWithRelativePaths(dartFiles, directory)
-        ApplicationManager.getApplication().runWriteAction {
-            val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
-                .getDocument(barrelFile.virtualFile)
-            if (document != null) {
-                document.setText(content)
-                com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
-            }
+        val (directory, dartFiles, content) = ApplicationManager.getApplication().runReadAction<Triple<PsiDirectory?, List<PsiFile>, String>> {
+            val dir = barrelFile.containingDirectory
+            val files = dir?.let { DartFileUtils.getAllDartFilesRecursively(it).filter { it.name != barrelFile.name } } ?: emptyList()
+            val cont = dir?.let { buildBarrelContentWithRelativePaths(files, it) } ?: ""
+            Triple(dir, files, cont)
         }
+        if (directory == null) return
+
+        ApplicationManager.getApplication().invokeAndWait({
+            ApplicationManager.getApplication().runWriteAction {
+                val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
+                    .getDocument(barrelFile.virtualFile)
+                if (document != null) {
+                    document.setText(content)
+                    com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
+                }
+            }
+        }, ModalityState.defaultModalityState())
     }
 
     private fun isPrivateFile(file: PsiFile): Boolean {

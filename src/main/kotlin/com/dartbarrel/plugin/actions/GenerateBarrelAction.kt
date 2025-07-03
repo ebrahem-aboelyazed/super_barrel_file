@@ -14,7 +14,6 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiManager
 
 class GenerateBarrelAction : AnAction() {
@@ -50,26 +49,6 @@ class GenerateBarrelAction : AnAction() {
                 )
             }
         })
-    }
-
-    private fun generateBarrelFilesRecursively(
-        project: Project,
-        directory: PsiDirectory,
-        indicator: ProgressIndicator
-    ) {
-        val barrelService = project.service<DartBarrelService>()
-
-        indicator.text = "Generating barrel file..."
-        indicator.isIndeterminate = true
-
-        val generatedFile = barrelService.generateBarrelFile(directory)
-        val generatedCount = if (generatedFile != null) 1 else 0
-
-        NotificationUtils.showInfo(
-            project,
-            "Barrel File Generated",
-            "Generated $generatedCount file in ${directory.name}"
-        )
     }
 
 
