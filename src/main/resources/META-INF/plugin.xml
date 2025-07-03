@@ -1,15 +1,111 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
-    <id>com.github.ebrahemaboelyazed.superbarrelfile</id>
-    <name>super_barrel_file</name>
-    <vendor>ebrahem-aboelyazed</vendor>
+    <id>com.dartbarrel.plugin</id>
+    <name>Dart Barrel File Manager</name>
+    <vendor email="support@dartbarrel.com" url="https://dartbarrel.com">Dart Barrel Team</vendor>
+
+    <description><![CDATA[
+        A comprehensive plugin for managing Dart barrel files in Flutter/Dart projects.
+        Automatically generates and maintains barrel files with smart export management.
+        Uses folder names as default barrel file names.
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <h3>Version 1.0.0</h3>
+        <ul>
+            <li>Initial release</li>
+            <li>Auto-generate barrel files with folder names</li>
+            <li>Smart export detection</li>
+            <li>Bulk operations support</li>
+            <li>Real-time file monitoring</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
-
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <depends>Dart</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.ebrahemaboelyazed.superbarrelfile.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.ebrahemaboelyazed.superbarrelfile.startup.MyProjectActivity" />
+        <!-- Settings -->
+
+        <notificationGroup
+                id="Dart Barrel Plugin"
+                displayType="BALLOON"
+                isLogByDefault="true"/>
+
+        <applicationService serviceImplementation="com.dartbarrel.plugin.settings.DartBarrelSettings"/>
+
+        <applicationConfigurable
+                parentId="language"
+                instance="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
+                id="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
+                displayName="Dart Barrel Files"/>
+
+        <!-- File listeners -->
+        <vfs.asyncListener implementation="com.dartbarrel.plugin.listeners.DartFileListener"/>
+
+        <!-- Inspections -->
+       <!-- <localInspection
+                language="Dart"
+                displayName="Missing Barrel File"
+                groupName="Dart Barrel"
+                enabledByDefault="true"
+                level="WEAK WARNING"
+                implementationClass="com.dartbarrel.plugin.inspections.MissingBarrelInspection"/>-->
+
+        <localInspection
+                language="Dart"
+                displayName="Outdated Barrel File"
+                groupName="Dart Barrel"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.dartbarrel.plugin.inspections.OutdatedBarrelInspection"/>
+
+        <!-- Tool window -->
+        <toolWindow id="Dart Barrel"
+                    secondary="true"
+                    anchor="right"
+                    factoryClass="com.dartbarrel.plugin.toolwindow.DartBarrelToolWindowFactory"/>
     </extensions>
+
+    <actions>
+        <action id="DartBarrel.GenerateBarrel"
+                class="com.dartbarrel.plugin.actions.GenerateBarrelAction"
+                text="Generate Barrel File"
+                description="Generate barrel file for selected directory">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="NewGroup"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="RefactoringMenu"/>
+        </action>
+
+        <action id="DartBarrel.RegenerateBarrel"
+                class="com.dartbarrel.plugin.actions.RegenerateBarrelAction"
+                text="Regenerate Barrel File"
+                description="Regenerate existing barrel file">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
+                          relative-to-action="DartBarrel.GenerateBarrel"/>
+        </action>
+
+        <action id="DartBarrel.BulkGenerate"
+                class="com.dartbarrel.plugin.actions.BulkGenerateAction"
+                text="Generate Barrel Files (Bulk)"
+                description="Generate barrel files for all subdirectories">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
+                          relative-to-action="DartBarrel.RegenerateBarrel"/>
+        </action>
+
+        <action id="DartBarrel.Settings"
+                class="com.dartbarrel.plugin.actions.SettingsAction"
+                text="Barrel File Settings"
+                description="Configure barrel file generation settings">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <group id="DartBarrelGroup" text="Dart Barrel" popup="true">
+            <reference ref="DartBarrel.GenerateBarrel"/>
+            <reference ref="DartBarrel.RegenerateBarrel"/>
+            <separator/>
+            <reference ref="DartBarrel.BulkGenerate"/>
+            <separator/>
+            <reference ref="DartBarrel.Settings"/>
+        </group>
+    </actions>
 </idea-plugin>
