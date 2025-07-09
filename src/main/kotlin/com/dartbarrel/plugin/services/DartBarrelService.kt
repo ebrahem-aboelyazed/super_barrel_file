@@ -121,12 +121,15 @@ class DartBarrelService(private val project: Project) {
     }
 
     fun regenerateBarrelFileForFile(barrelFile: PsiFile) {
-        val (directory, dartFiles, content) = ApplicationManager.getApplication().runReadAction<Triple<PsiDirectory?, List<PsiFile>, String>> {
-            val dir = barrelFile.containingDirectory
-            val files = dir?.let { DartFileUtils.getAllDartFilesRecursively(it).filter { it.name != barrelFile.name } } ?: emptyList()
-            val cont = dir?.let { buildBarrelContentWithRelativePaths(files, it) } ?: ""
-            Triple(dir, files, cont)
-        }
+        val (directory, _, content) = ApplicationManager.getApplication()
+            .runReadAction<Triple<PsiDirectory?, List<PsiFile>, String>> {
+                val dir = barrelFile.containingDirectory
+                val files = dir?.let {
+                    DartFileUtils.getAllDartFilesRecursively(it).filter { filter -> filter.name != barrelFile.name }
+                } ?: emptyList()
+                val cont = dir?.let { buildBarrelContentWithRelativePaths(files, it) } ?: ""
+                Triple(dir, files, cont)
+            }
         if (directory == null) return
 
         ApplicationManager.getApplication().invokeAndWait({

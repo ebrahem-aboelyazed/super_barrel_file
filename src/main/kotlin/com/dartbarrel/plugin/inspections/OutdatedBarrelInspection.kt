@@ -1,4 +1,6 @@
 // OutdatedBarrelInspection.kt
+@file:Suppress("DialogTitleCapitalization")
+
 package com.dartbarrel.plugin.inspections
 
 import com.dartbarrel.plugin.services.DartBarrelService

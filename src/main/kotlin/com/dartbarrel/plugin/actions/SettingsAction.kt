@@ -1,3 +1,5 @@
+@file:Suppress("DialogTitleCapitalization")
+
 package com.dartbarrel.plugin.actions
 
 import com.intellij.openapi.actionSystem.AnAction
