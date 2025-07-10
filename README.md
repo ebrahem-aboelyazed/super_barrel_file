@@ -1,51 +1,86 @@
-# super_barrel_file
+# Dart Barrel Manager
 
-![Build](https://github.com/ebrahem-aboelyazed/super_barrel_file/workflows/Build/badge.svg)
-[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
+![Build](https://github.com/ebrahem-aboelyazed/super_barrel_file/workflows/Build/badge.svg)  
+[![Version](https://img.shields.io/jetbrains/plugin/v/27872.svg)](https://plugins.jetbrains.com/plugin/27872)  
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/27872.svg)](https://plugins.jetbrains.com/plugin/27872)
 
-## Template ToDo list
-- [x] Create a new [IntelliJ Platform Plugin Template][template] project.
-- [ ] Get familiar with the [template documentation][template].
-- [ ] Adjust the [pluginGroup](./gradle.properties) and [pluginName](./gradle.properties), as well as the [id](./src/main/resources/META-INF/plugin.xml) and [sources package](./src/main/kotlin).
-- [ ] Adjust the plugin description in `README` (see [Tips][docs:plugin-description])
-- [ ] Review the [Legal Agreements](https://plugins.jetbrains.com/docs/marketplace/legal-agreements.html?from=IJPluginTemplate).
-- [ ] [Publish a plugin manually](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate) for the first time.
-- [ ] Set the `MARKETPLACE_ID` in the above README badges. You can obtain it once the plugin is published to JetBrains Marketplace.
-- [ ] Set the [Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html?from=IJPluginTemplate) related [secrets](https://github.com/JetBrains/intellij-platform-plugin-template#environment-variables).
-- [ ] Set the [Deployment Token](https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html?from=IJPluginTemplate).
-- [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
+**Dart Barrel Manager** is an IntelliJ-based plugin for Dart and Flutter developers that automatically generates and manages _barrel files_ (also known as `index.dart` or `{folder_name}.dart`). These files help centralize your exports and keep imports across your codebase clean, consistent, and maintainable.
 
+---
 <!-- Plugin description -->
-This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
+Features
 
-This specific section is a source for the [plugin.xml](/src/main/resources/META-INF/plugin.xml) file which will be extracted by the [Gradle](/build.gradle.kts) during the build process.
+Dedicated Tool Window  
+Browse, navigate, and regenerate barrel files directly from a streamlined side panel integrated into the IDE.
 
-To keep everything working, do not remove `<!-- ... -->` sections. 
+One Click Generation  
+Instantly generate barrel files for any folder or recursively across your entire project.
+
+Highly Configurable Options  
+Adapt the plugin’s behavior to fit your project conventions.  
+Choose naming strategies like index.dart, {folder_name}.dart, or a custom file name.  
+Enable or disable automatic export or import statements.  
+Add custom header comments to generated files.  
+Exclude files using patterns such as *.g.dart, *.freezed.dart, or any regular expression.  
+Automatically sort export statements for cleaner diffs and improved readability.  
+Hide private members or selectively expose public APIs using show or hide modifiers.
+
+Smart Regeneration  
+Automatically detects when regeneration is needed based on file modification times.
+
+Safe and Clean  
+Automatically avoids regenerating existing barrel files such as index.dart to prevent recursion or file conflicts.
 <!-- Plugin description end -->
-
-## Installation
-
-- Using the IDE built-in plugin system:
-  
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "super_barrel_file"</kbd> >
-  <kbd>Install</kbd>
-  
-- Using JetBrains Marketplace:
-
-  Go to [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID) and install it by clicking the <kbd>Install to ...</kbd> button in case your IDE is running.
-
-  You can also download the [latest release](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID/versions) from JetBrains Marketplace and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
-
-- Manually:
-
-  Download the [latest release](https://github.com/ebrahem-aboelyazed/super_barrel_file/releases/latest) and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
 
 ---
-Plugin based on the [IntelliJ Platform Plugin Template][template].
 
-[template]: https://github.com/JetBrains/intellij-platform-plugin-template
-[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
+## 📦 Installation
+
+### ✅ From JetBrains Marketplace
+
+1. Open **Settings / Preferences > Plugins > Marketplace**
+2. Search for `Dart Barrel Manager`
+3. Click **Install** and restart your IDE
+
+Or install it directly from the [JetBrains Plugin Page](https://plugins.jetbrains.com/plugin/27872).
+
+---
+
+### 📁 Manual Installation
+
+1. Download the latest release from the [GitHub Releases](https://github.com/ebrahem-aboelyazed/super_barrel_file/releases/latest)
+2. Open **Settings / Preferences > Plugins**
+3. Click the ⚙️ icon > **Install Plugin from Disk...**
+4. Select the downloaded `.zip` file and restart the IDE
+
+---
+
+## 💡 Why Use Barrel Files?
+
+Barrel files consolidate multiple file exports into a single entry point. This improves:
+- Code readability and consistency across large projects
+- Import simplicity, especially for shared or modularized architectures
+- Refactoring ease when files are moved or renamed
+
+---
+
+## 🛠️ Contributing
+
+Want to improve the plugin or report a bug?
+
+- Open an [issue](https://github.com/ebrahem-aboelyazed/super_barrel_file/issues)
+- Submit a [pull request](https://github.com/ebrahem-aboelyazed/super_barrel_file/pulls)
+- Star the repo to support the project ⭐
+
+---
+
+## 📄 License
+
+Licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Developed with ❤️ using the [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template) and inspired by real-world needs in growing Dart/Flutter codebases.

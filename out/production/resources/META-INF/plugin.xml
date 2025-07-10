@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <idea-plugin>
     <id>com.dartbarrel.plugin</id>
-    <name>Dart Barrel File Manager</name>
+    <name>Dart Barrel Manager</name>
     <vendor email="support@dartbarrel.com" url="https://dartbarrel.com">Dart Barrel Team</vendor>
 
     <description><![CDATA[
