@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>com.dartbarrel.plugin</id>
     <name>Dart Barrel File Manager</name>
-    <vendor email="support@dartbarrel.com" url="https://dartbarrel.com">Dart Barrel Team</vendor>
+    <vendor email="ebrahem6076@gmail.com">Dart Barrel Team</vendor>
 
     <description><![CDATA[
         A comprehensive plugin for managing Dart barrel files in Flutter/Dart projects.
