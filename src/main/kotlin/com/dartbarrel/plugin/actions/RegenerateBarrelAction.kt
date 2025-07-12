@@ -24,7 +24,7 @@ class RegenerateBarrelAction : AnAction() {
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Regenerating barrel file", true) {
             override fun run(indicator: ProgressIndicator) {
-                barrelService.regenerateBarrelFileForFile(psiFile)
+                barrelService.regenerateBarrelFileAsync(psiFile)
                 NotificationUtils.showInfo(
                     project,
                     "Barrel File Regenerated",

@@ -102,7 +102,7 @@ class DartBarrelToolWindow(private val project: Project) {
 
         // Only generate for the root/base directory
         ApplicationManager.getApplication().runWriteAction {
-            barrelService.generateBarrelFile(psiDirectory)
+            barrelService.generateBarrelFileAsync(psiDirectory)
         }
         refreshBarrelFilesList()
     }

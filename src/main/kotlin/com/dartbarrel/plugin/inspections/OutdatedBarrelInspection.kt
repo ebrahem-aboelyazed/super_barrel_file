@@ -44,7 +44,7 @@ class OutdatedBarrelInspection : LocalInspectionTool() {
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val file = descriptor.psiElement as? PsiFile ?: return
             val barrelService = project.service<DartBarrelService>()
-            barrelService.regenerateBarrelFileForFile(file)
+            barrelService.regenerateBarrelFileAsync(file)
         }
     }
 }

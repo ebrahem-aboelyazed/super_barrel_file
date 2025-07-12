@@ -61,7 +61,7 @@ class DartFileListener : AsyncFileListener {
                         psiDirectory?.let { directory ->
                             val barrelFile = directory.files.find { barrelService.isBarrelFile(it.virtualFile) }
                             if (barrelFile != null && barrelService.needsRegeneration(barrelFile)) {
-                                barrelService.regenerateBarrelFileForFile(barrelFile)
+                                barrelService.regenerateBarrelFileAsync(barrelFile)
                             }
                         }
                     }
@@ -74,7 +74,7 @@ class DartFileListener : AsyncFileListener {
                             psiDirectory?.let { directory ->
                                 val barrelFile = directory.files.find { barrelService.isBarrelFile(it.virtualFile) }
                                 if (barrelFile != null && barrelService.needsRegeneration(barrelFile)) {
-                                    barrelService.regenerateBarrelFileForFile(barrelFile)
+                                    barrelService.regenerateBarrelFileAsync(barrelFile)
                                 }
                             }
                         }
