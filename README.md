@@ -82,12 +82,6 @@ Want to improve the plugin or report a bug?
 
 ---
 
-## 📄 License
-
-Licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
----
-
 ## 🙏 Acknowledgments
 
 Developed with ❤️ using
