@@ -27,7 +27,7 @@ class OutdatedBarrelInspection : LocalInspectionTool() {
                     val fix = RegenerateBarrelQuickFix()
                     holder.registerProblem(
                         file,
-                        "Barrel file is outdated. Please regenerate.",
+                        "Barrel file is outdated, click to regenerate.",
                         ProblemHighlightType.WARNING,
                         fix
                     )
@@ -44,7 +44,7 @@ class OutdatedBarrelInspection : LocalInspectionTool() {
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val file = descriptor.psiElement as? PsiFile ?: return
             val barrelService = project.service<DartBarrelService>()
-            barrelService.regenerateBarrelFileAsync(file)
+            barrelService.regenerateBarrelFileForFile(file)
         }
     }
 }
