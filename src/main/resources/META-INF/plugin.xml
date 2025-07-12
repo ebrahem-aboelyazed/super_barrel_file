@@ -37,7 +37,7 @@
                 parentId="language"
                 instance="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
                 id="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
-                displayName="Dart Barrel Files"/>
+                displayName="Dart Barrel Manager"/>
 
         <!-- File listeners -->
         <vfs.asyncListener implementation="com.dartbarrel.plugin.listeners.DartFileListener"/>

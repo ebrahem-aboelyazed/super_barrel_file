@@ -94,7 +94,7 @@ class GenerateBarrelDialog(
         previewScroll.preferredSize = Dimension(500, 140)
         previewPanel.add(previewScroll, BorderLayout.CENTER)
 
-        // Add all groups to main panel
+        // Add all groups to the main panel
         mainPanel.add(namePanel)
         mainPanel.add(Box.createVerticalStrut(12))
         mainPanel.add(filePanel)

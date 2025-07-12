@@ -193,7 +193,7 @@ class DartBarrelService(private val project: Project) {
         }, AppExecutorUtil.getAppExecutorService())
     }
 
-    fun batchGenerateBarrelFiles(directories: List<PsiDirectory>): CompletableFuture<List<PsiFile?>> {
+    /*fun batchGenerateBarrelFiles(directories: List<PsiDirectory>): CompletableFuture<List<PsiFile?>> {
         return CompletableFuture.supplyAsync({
             directories.chunked(5).flatMap { batch ->
                 batch.map { directory ->
@@ -211,7 +211,7 @@ class DartBarrelService(private val project: Project) {
                 }
             }
         }, AppExecutorUtil.getAppExecutorService())
-    }
+    }*/
 
     private fun isPrivateFile(file: PsiFile): Boolean {
         return file.name.startsWith("_")

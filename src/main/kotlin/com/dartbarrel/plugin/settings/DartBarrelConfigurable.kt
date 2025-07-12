@@ -30,7 +30,7 @@ class DartBarrelConfigurable : Configurable {
 
     private var panel: JPanel? = null
 
-    override fun getDisplayName(): String = "Dart Barrel Files"
+    override fun getDisplayName(): String = "Dart Barrel Manager"
 
     override fun createComponent(): JComponent {
         panel = FormBuilder.createFormBuilder()

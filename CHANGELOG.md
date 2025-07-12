@@ -3,5 +3,4 @@
 # super_barrel_file Changelog
 
 ## [Unreleased]
-### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+add async operations to improve performance

@@ -34,11 +34,9 @@ class DartBarrelToolWindow(private val project: Project) {
             border = JBUI.Borders.empty(5)
         }
 
-        // Create toolbar
         val toolbar = createToolbar()
         panel.add(toolbar, BorderLayout.NORTH)
 
-        // Create list
         barrelFilesList.apply {
             cellRenderer = BarrelFileListCellRenderer()
             addMouseListener(object : MouseAdapter() {
