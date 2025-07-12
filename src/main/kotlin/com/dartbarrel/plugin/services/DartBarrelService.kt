@@ -5,7 +5,6 @@ import com.dartbarrel.plugin.utils.DartFileUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.Service
-import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDirectory
@@ -33,11 +32,11 @@ class DartBarrelService(private val project: Project) {
         ApplicationManager.getApplication().invokeAndWait({
             ApplicationManager.getApplication().runWriteAction {
                 if (existingBarrel != null) {
-                    val document = FileDocumentManager.getInstance()
+                    val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
                         .getDocument(existingBarrel.virtualFile)
                     if (document != null) {
                         document.setText(content)
-                        FileDocumentManager.getInstance().saveDocument(document)
+                        com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
                         resultFile = existingBarrel
                     }
                 } else {
@@ -65,11 +64,11 @@ class DartBarrelService(private val project: Project) {
         ApplicationManager.getApplication().invokeAndWait({
             ApplicationManager.getApplication().runWriteAction {
                 if (existingBarrel != null) {
-                    val document = FileDocumentManager.getInstance()
+                    val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
                         .getDocument(existingBarrel.virtualFile)
                     if (document != null) {
                         document.setText(content)
-                        FileDocumentManager.getInstance().saveDocument(document)
+                        com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
                         resultFile = existingBarrel
                     }
                 } else {
@@ -83,13 +82,10 @@ class DartBarrelService(private val project: Project) {
 
     private fun buildBarrelContentWithRelativePaths(dartFiles: List<PsiFile>, rootDirectory: PsiDirectory): String {
         val barrelFileName = getBarrelFileName(rootDirectory)
-        val rootPath = rootDirectory.virtualFile.toNioPath()
-
-        val exports = dartFiles.asSequence()
+        val exports = dartFiles
             .filter { it.name != barrelFileName }
-            .filter { !isPrivateFile(it) }
             .map { file ->
-                val relativePath = rootPath
+                val relativePath = rootDirectory.virtualFile.toNioPath()
                     .relativize(file.virtualFile.toNioPath())
                     .toString()
                     .replace("\\", "/")
@@ -110,13 +106,9 @@ class DartBarrelService(private val project: Project) {
 
     fun isBarrelFile(virtualFile: VirtualFile): Boolean {
         val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return false
-
-        val lines = psiFile.text.lineSequence()
+        val lines = psiFile.text.lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() && !it.startsWith("//") && !it.startsWith("/*") }
-            .take(100) // Limit check to first 100 non-comment lines for performance
-            .toList()
-
         return lines.isNotEmpty() && lines.all { it.startsWith("export ") && it.endsWith(";") }
     }
 
@@ -134,7 +126,7 @@ class DartBarrelService(private val project: Project) {
     }
 
     private fun normalizeContentForComparison(content: String): String {
-        return content.lineSequence()
+        return content.lines()
             .map { it.trim() }
             .filter { line ->
                 line.isNotEmpty() &&
@@ -159,11 +151,11 @@ class DartBarrelService(private val project: Project) {
 
         ApplicationManager.getApplication().invokeAndWait({
             ApplicationManager.getApplication().runWriteAction {
-                val document = FileDocumentManager.getInstance()
+                val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
                     .getDocument(barrelFile.virtualFile)
                 if (document != null) {
                     document.setText(content)
-                    FileDocumentManager.getInstance().saveDocument(document)
+                    com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(document)
                 }
             }
         }, ModalityState.defaultModalityState())
