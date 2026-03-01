@@ -116,7 +116,7 @@ class GenerateBarrelDialog(
         val content = barrelService
             .let {
                 val method = it::class.java.getDeclaredMethod(
-                    "buildBarrelContentWithRelativePaths",
+                    "buildBarrelContent",
                     List::class.java,
                     PsiDirectory::class.java
                 )
