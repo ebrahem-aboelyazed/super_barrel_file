@@ -2,6 +2,7 @@
 
 package com.dartbarrel.plugin.actions
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -15,5 +16,9 @@ class SettingsAction : AnAction() {
             project,
             "com.dartbarrel.plugin.settings.DartBarrelConfigurable"
         )
+    }
+
+    override fun getActionUpdateThread(): ActionUpdateThread {
+        return ActionUpdateThread.BGT
     }
 }

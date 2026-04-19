@@ -40,7 +40,6 @@
                 displayName="Dart Barrel Manager"/>
 
         <!-- File listeners -->
-        <vfs.asyncListener implementation="com.dartbarrel.plugin.listeners.DartFileListener"/>
 
         <!-- Inspections -->
         <!-- <localInspection
@@ -61,8 +60,8 @@
 
         <!-- Tool window -->
         <toolWindow id="Dart Barrel"
-                    secondary="true"
                     anchor="right"
+                    icon="/icons/dartBarrelToolWindow.svg"
                     factoryClass="com.dartbarrel.plugin.toolwindow.DartBarrelToolWindowFactory"/>
     </extensions>
 
@@ -93,4 +92,9 @@
 
 
     </actions>
+
+    <projectListeners>
+        <listener class="com.dartbarrel.plugin.listeners.DartFileListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
 </idea-plugin>

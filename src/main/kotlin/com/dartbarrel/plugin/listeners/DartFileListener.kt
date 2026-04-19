@@ -6,31 +6,32 @@ import com.dartbarrel.plugin.utils.DartFileUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.vfs.AsyncFileListener
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.newvfs.events.*
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.jetbrains.lang.dart.DartFileType
 
-class DartFileListener : AsyncFileListener {
+class DartFileListener(
+    private val project: Project,
+) : BulkFileListener {
 
     private val settings = DartBarrelSettings.getInstance()
 
-    override fun prepareChange(
-        events: MutableList<out VFileEvent>,
-    ): AsyncFileListener.ChangeApplier? {
-        if (!settings.autoGenerate) return null
+    override fun after(events: MutableList<out VFileEvent>) {
+        if (!settings.autoGenerate) return
+        if (project.isDisposed) return
 
         val dartEvents = events.filter(::isRelevantDartEvent)
-        if (dartEvents.isEmpty()) return null
+        if (dartEvents.isEmpty()) return
 
-        return object : AsyncFileListener.ChangeApplier {
-            override fun afterVfsChange() {
-                dartEvents.forEach(::handleDartFileChange)
-            }
-        }
+        dartEvents.forEach(::handleDartFileChange)
     }
 
     private fun isRelevantDartEvent(
@@ -44,62 +45,56 @@ class DartFileListener : AsyncFileListener {
     }
 
     private fun handleDartFileChange(event: VFileEvent) {
-        val projects = ProjectManager.getInstance().openProjects
-        if (projects.isEmpty()) return
+        if (project.isDisposed) return
 
-        for (project in projects) {
-            if (project.isDisposed) continue
+        val barrelService = project.service<DartBarrelService>()
+        val affectedDirs = mutableSetOf<VirtualFile>()
 
-            val barrelService = project.service<DartBarrelService>()
-
-            val affectedDirs = mutableSetOf<VirtualFile>()
-
-            when (event) {
-                is VFileCreateEvent,
-                is VFileDeleteEvent,
-                is VFileContentChangeEvent -> {
-                    event.file?.parent?.let {
-                        affectedDirs.add(it)
-                    }
-                }
-                is VFileMoveEvent -> {
-                    affectedDirs.add(event.newParent)
-                    affectedDirs.add(event.oldParent)
+        when (event) {
+            is VFileCreateEvent,
+            is VFileDeleteEvent,
+            is VFileContentChangeEvent -> {
+                event.file?.parent?.let {
+                    affectedDirs.add(it)
                 }
             }
+            is VFileMoveEvent -> {
+                affectedDirs.add(event.newParent)
+                affectedDirs.add(event.oldParent)
+            }
+        }
 
-            for (dir in affectedDirs) {
-                if (!dir.isValid) continue
+        for (dir in affectedDirs) {
+            if (!dir.isValid) continue
 
-                try {
-                    val barrelFile = ApplicationManager
-                        .getApplication()
-                        .runReadAction<PsiFile?> {
-                            val psiDir = PsiManager
-                                .getInstance(project)
-                                .findDirectory(dir)
-                                ?: return@runReadAction null
+            try {
+                val barrelFile = ApplicationManager
+                    .getApplication()
+                    .runReadAction<PsiFile?> {
+                        val psiDir = PsiManager
+                            .getInstance(project)
+                            .findDirectory(dir)
+                            ?: return@runReadAction null
 
-                            psiDir.files.firstOrNull {
-                                it.isValid &&
-                                    barrelService
-                                        .isBarrelFile(it)
-                            }
-                        } ?: continue
+                        psiDir.files.firstOrNull {
+                            it.isValid &&
+                                barrelService
+                                    .isBarrelFile(it)
+                        }
+                    } ?: continue
 
-                    if (barrelService
-                            .needsRegeneration(barrelFile)
-                    ) {
-                        barrelService
-                            .regenerateBarrelFile(barrelFile)
-                    }
-                } catch (e: Exception) {
-                    LOG.warn(
-                        "Error handling dart file change " +
-                            "in ${dir.path}",
-                        e,
-                    )
+                if (barrelService
+                        .needsRegeneration(barrelFile)
+                ) {
+                    barrelService
+                        .regenerateBarrelFile(barrelFile)
                 }
+            } catch (e: Exception) {
+                LOG.warn(
+                    "Error handling dart file change " +
+                        "in ${dir.path}",
+                    e,
+                )
             }
         }
     }
