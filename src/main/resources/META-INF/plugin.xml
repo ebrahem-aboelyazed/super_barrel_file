@@ -58,9 +58,11 @@
                 level="WARNING"
                 implementationClass="com.dartbarrel.plugin.inspections.OutdatedBarrelInspection"/>
 
-        <!-- Tool window (registered programmatically) -->
-        <postStartupActivity
-                implementation="com.dartbarrel.plugin.toolwindow.DartBarrelToolWindowRegistrar"/>
+        <!-- Tool window -->
+        <toolWindow id="Dart Barrel"
+                    anchor="right"
+                    icon="/icons/dartBarrelToolWindow.svg"
+                    factoryClass="com.dartbarrel.plugin.toolwindow.DartBarrelToolWindowFactory"/>
     </extensions>
 
     <actions>
