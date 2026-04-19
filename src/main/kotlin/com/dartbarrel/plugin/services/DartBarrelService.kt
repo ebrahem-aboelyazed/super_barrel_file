@@ -171,11 +171,12 @@ class DartBarrelService(project: Project) {
      */
     fun isBarrelFile(virtualFile: VirtualFile): Boolean {
         if (!virtualFile.isValid) return false
+        if (matchesBarrelFileName(virtualFile)) return true
         val psiFile = ApplicationManager.getApplication()
             .runReadAction<PsiFile?> {
                 psiManager.findFile(virtualFile)
             } ?: return false
-        return isBarrelFile(psiFile)
+        return hasBarrelContent(psiFile)
     }
 
     /**
@@ -183,10 +184,36 @@ class DartBarrelService(project: Project) {
      */
     fun isBarrelFile(psiFile: PsiFile): Boolean {
         if (!psiFile.isValid) return false
+        val virtualFile = psiFile.virtualFile
+        if (virtualFile != null && matchesBarrelFileName(virtualFile)) {
+            return true
+        }
+        return hasBarrelContent(psiFile)
+    }
 
+    private fun matchesBarrelFileName(
+        virtualFile: VirtualFile,
+    ): Boolean {
+        val fileName = virtualFile.name
+        val defaultName = settings.barrelFileName
+
+        return when {
+            fileName == "index.dart" -> true
+            fileName == defaultName -> true
+            defaultName.contains("{folder_name}") -> {
+                val parentName =
+                    virtualFile.parent?.name ?: return false
+                fileName == "$parentName.dart"
+            }
+            else -> false
+        }
+    }
+
+    private fun hasBarrelContent(psiFile: PsiFile): Boolean {
         return ApplicationManager.getApplication()
             .runReadAction<Boolean> {
-                val text = psiFile.text ?: return@runReadAction false
+                val text =
+                    psiFile.text ?: return@runReadAction false
                 val lines = text.lines()
                     .map { it.trim() }
                     .filter {
@@ -196,7 +223,8 @@ class DartBarrelService(project: Project) {
                     }
 
                 lines.isNotEmpty() && lines.all {
-                    it.startsWith("export ") && it.endsWith(";")
+                    it.startsWith("export ") &&
+                        it.endsWith(";")
                 }
             }
     }
