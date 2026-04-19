@@ -1,7 +1,6 @@
 package com.dartbarrel.plugin.toolwindow
 
 import com.dartbarrel.plugin.services.DartBarrelService
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -98,10 +97,7 @@ class DartBarrelToolWindow(private val project: Project) {
 
         val psiDirectory = psiManager.findDirectory(baseDir) ?: return
 
-        // Only generate for the root/base directory
-        ApplicationManager.getApplication().runWriteAction {
-            barrelService.generateBarrelFile(psiDirectory)
-        }
+        barrelService.generateBarrelFile(psiDirectory)
         refreshBarrelFilesList()
     }
 

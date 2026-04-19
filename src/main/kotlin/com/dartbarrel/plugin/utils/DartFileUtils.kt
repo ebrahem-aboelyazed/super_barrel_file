@@ -1,10 +1,12 @@
 package com.dartbarrel.plugin.utils
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiManager
 import com.jetbrains.lang.dart.DartFileType
 import com.jetbrains.lang.dart.psi.DartClass
 import com.jetbrains.lang.dart.psi.DartExtensionDeclaration
@@ -12,6 +14,10 @@ import com.jetbrains.lang.dart.psi.DartFile
 import com.jetbrains.lang.dart.psi.DartFunctionDeclarationWithBodyOrNative
 
 object DartFileUtils {
+
+    private val LOG = Logger.getInstance(
+        DartFileUtils::class.java,
+    )
 
     /**
      * Gets all direct Dart files in a directory (non-recursive)
@@ -47,25 +53,68 @@ object DartFileUtils {
     /**
      * Creates a new Dart file with the given content
      */
-    fun createDartFile(directory: PsiDirectory, fileName: String, content: String): PsiFile? {
+    fun createDartFile(
+        directory: PsiDirectory,
+        fileName: String,
+        content: String,
+    ): PsiFile? {
         return try {
-            val psiFileFactory = PsiFileFactory.getInstance(directory.project)
+            val psiFileFactory = PsiFileFactory.getInstance(
+                directory.project,
+            )
             val file = psiFileFactory.createFileFromText(
                 fileName,
                 DartFileType.INSTANCE,
-                content
+                content,
             )
 
-            // Add the file to the directory
             val addedFile = directory.add(file) as? PsiFile
 
-            // Ensure the virtual file is properly refreshed
-            addedFile?.virtualFile?.refresh(false, false)
+            if (addedFile != null) {
+                addedFile.virtualFile?.refresh(false, false)
+                return addedFile
+            }
 
-            addedFile
+            LOG.warn(
+                "PSI add returned null, falling back to VFS"
+            )
+            createDartFileViaVfs(directory, fileName, content)
         } catch (e: Exception) {
-            null
+            LOG.error(
+                "Failed to create dart file '$fileName' " +
+                    "via PSI, trying VFS fallback",
+                e,
+            )
+            try {
+                createDartFileViaVfs(
+                    directory,
+                    fileName,
+                    content,
+                )
+            } catch (e2: Exception) {
+                LOG.error(
+                    "VFS fallback also failed for " +
+                        "'$fileName'",
+                    e2,
+                )
+                null
+            }
         }
+    }
+
+    private fun createDartFileViaVfs(
+        directory: PsiDirectory,
+        fileName: String,
+        content: String,
+    ): PsiFile? {
+        val vDir = directory.virtualFile
+        val vFile = vDir.createChildData(this, fileName)
+        vFile.setBinaryContent(
+            content.toByteArray(Charsets.UTF_8),
+        )
+        vFile.refresh(false, false)
+        return PsiManager.getInstance(directory.project)
+            .findFile(vFile)
     }
 
     /**

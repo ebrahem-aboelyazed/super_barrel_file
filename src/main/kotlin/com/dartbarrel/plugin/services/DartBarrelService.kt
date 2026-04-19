@@ -5,6 +5,7 @@ import com.dartbarrel.plugin.utils.DartFileUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -20,104 +21,188 @@ class DartBarrelService(project: Project) {
     private val psiManager = PsiManager.getInstance(project)
 
     /**
-     * Generates a barrel file for all Dart files in the given directory
+     * Generates a barrel file for all Dart files in the
+     * given directory.
      */
     fun generateBarrelFile(directory: PsiDirectory): PsiFile? {
-        return ApplicationManager.getApplication().runReadAction<PsiFile?> {
-            val dartFiles = DartFileUtils.getAllDartFilesRecursively(directory)
-            if (dartFiles.isEmpty()) return@runReadAction null
+        val dartFiles = ApplicationManager.getApplication()
+            .runReadAction<List<PsiFile>> {
+                DartFileUtils.getAllDartFilesRecursively(directory)
+            }
 
-            val barrelFileName = getBarrelFileName(directory)
-            generateBarrelFileWithCustomSelection(directory, dartFiles, barrelFileName)
-        }
+        if (dartFiles.isEmpty()) return null
+
+        val barrelFileName = ApplicationManager.getApplication()
+            .runReadAction<String> { getBarrelFileName(directory) }
+
+        return generateBarrelFileWithCustomSelection(
+            directory,
+            dartFiles,
+            barrelFileName,
+        )
     }
 
     /**
-     * Generates a barrel file with custom file selection
+     * Generates a barrel file with custom file selection.
      */
     fun generateBarrelFileWithCustomSelection(
         directory: PsiDirectory,
         selectedFiles: List<PsiFile>,
         barrelFileName: String
     ): PsiFile? {
-        if (selectedFiles.isEmpty()) return null
+        if (selectedFiles.isEmpty()) {
+            LOG.warn("No files selected for barrel generation")
+            return null
+        }
+
+        val validFiles = selectedFiles.filter { it.isValid }
+        if (validFiles.isEmpty()) {
+            LOG.warn(
+                "All selected PSI files are invalid"
+            )
+            return null
+        }
 
         return try {
             WriteAction.compute<PsiFile?, Exception> {
-                val content = buildBarrelContent(selectedFiles, directory)
-                val existingBarrel = findExistingBarrelFile(directory, barrelFileName)
+                val content = buildBarrelContent(
+                    validFiles,
+                    directory,
+                )
+
+                if (content.isBlank()) {
+                    LOG.warn(
+                        "Built barrel content is blank for " +
+                            "directory: ${directory.name}"
+                    )
+                    return@compute null
+                }
+
+                val existingBarrel = findExistingBarrelFile(
+                    directory,
+                    barrelFileName,
+                )
 
                 if (existingBarrel != null) {
                     updateExistingBarrelFile(existingBarrel, content)
                 } else {
-                    createNewBarrelFile(directory, barrelFileName, content)
+                    createNewBarrelFile(
+                        directory,
+                        barrelFileName,
+                        content,
+                    )
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            LOG.error(
+                "Failed to generate barrel file " +
+                    "'$barrelFileName' in '${directory.name}'",
+                e,
+            )
             null
         }
     }
 
     /**
-     * Regenerates an existing barrel file
+     * Regenerates an existing barrel file.
      */
     fun regenerateBarrelFile(barrelFile: PsiFile) {
-        val directory = barrelFile.containingDirectory ?: return
+        if (!barrelFile.isValid) {
+            LOG.warn(
+                "Cannot regenerate invalid barrel file: " +
+                    barrelFile.name
+            )
+            return
+        }
 
-        WriteAction.run<Exception> {
-            val dartFiles = ApplicationManager.getApplication().runReadAction<List<PsiFile>> {
+        val directory = ApplicationManager.getApplication()
+            .runReadAction<PsiDirectory?> {
+                barrelFile.containingDirectory
+            } ?: return
+
+        val dartFiles = ApplicationManager.getApplication()
+            .runReadAction<List<PsiFile>> {
                 DartFileUtils.getAllDartFilesRecursively(directory)
-                    .filter { it.name != barrelFile.name }
+                    .filter {
+                        it.isValid && it.name != barrelFile.name
+                    }
             }
 
-            val content = buildBarrelContent(dartFiles, directory)
+        val content = ApplicationManager.getApplication()
+            .runReadAction<String> {
+                buildBarrelContent(dartFiles, directory)
+            }
+
+        WriteAction.run<Exception> {
             updateExistingBarrelFile(barrelFile, content)
         }
     }
 
     /**
-     * Checks if a barrel file needs regeneration
+     * Checks if a barrel file needs regeneration.
      */
     fun needsRegeneration(barrelFile: PsiFile): Boolean {
+        if (!barrelFile.isValid) return false
+
         val directory = barrelFile.containingDirectory ?: return false
 
-        return ApplicationManager.getApplication().runReadAction<Boolean> {
-            val dartFiles = DartFileUtils.getAllDartFilesRecursively(directory)
-                .filter { it.name != barrelFile.name }
+        return ApplicationManager.getApplication()
+            .runReadAction<Boolean> {
+                val dartFiles =
+                    DartFileUtils.getAllDartFilesRecursively(directory)
+                        .filter {
+                            it.isValid &&
+                                it.name != barrelFile.name
+                        }
 
-            val expectedContent = buildBarrelContent(dartFiles, directory)
-            val actualContent = normalizeContent(barrelFile.text)
-            val expectedNormalized = normalizeContent(expectedContent)
+                val expectedContent =
+                    buildBarrelContent(dartFiles, directory)
+                val actualContent =
+                    normalizeContent(barrelFile.text)
+                val expectedNormalized =
+                    normalizeContent(expectedContent)
 
-            expectedNormalized != actualContent
-        }
+                expectedNormalized != actualContent
+            }
     }
 
     /**
-     * Checks if a file is a barrel file
+     * Checks if a file is a barrel file.
      */
     fun isBarrelFile(virtualFile: VirtualFile): Boolean {
-        val psiFile = psiManager.findFile(virtualFile) ?: return false
+        if (!virtualFile.isValid) return false
+        val psiFile = ApplicationManager.getApplication()
+            .runReadAction<PsiFile?> {
+                psiManager.findFile(virtualFile)
+            } ?: return false
         return isBarrelFile(psiFile)
     }
 
     /**
-     * Checks if a PSI file is a barrel file
+     * Checks if a PSI file is a barrel file.
      */
     fun isBarrelFile(psiFile: PsiFile): Boolean {
-        return ApplicationManager.getApplication().runReadAction<Boolean> {
-            val lines = psiFile.text.lines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("//") && !it.startsWith("/*") }
+        if (!psiFile.isValid) return false
 
-            lines.isNotEmpty() && lines.all {
-                it.startsWith("export ") && it.endsWith(";")
+        return ApplicationManager.getApplication()
+            .runReadAction<Boolean> {
+                val text = psiFile.text ?: return@runReadAction false
+                val lines = text.lines()
+                    .map { it.trim() }
+                    .filter {
+                        it.isNotEmpty() &&
+                            !it.startsWith("//") &&
+                            !it.startsWith("/*")
+                    }
+
+                lines.isNotEmpty() && lines.all {
+                    it.startsWith("export ") && it.endsWith(";")
+                }
             }
-        }
     }
 
     /**
-     * Gets the barrel file name for a directory
+     * Gets the barrel file name for a directory.
      */
     fun getBarrelFileName(directory: PsiDirectory): String {
         return when (settings.barrelFileName) {
@@ -128,7 +213,7 @@ class DartBarrelService(project: Project) {
     }
 
     /**
-     * Builds the barrel file content
+     * Builds the barrel file content.
      */
     private fun buildBarrelContent(
         dartFiles: List<PsiFile>,
@@ -136,12 +221,36 @@ class DartBarrelService(project: Project) {
     ): String {
         val barrelFileName = getBarrelFileName(rootDirectory)
         val exports = dartFiles
-            .filter { it.name != barrelFileName }
+            .filter { it.isValid && it.name != barrelFileName }
             .mapNotNull { file ->
+                val virtualFile = file.virtualFile
+                if (virtualFile == null || !virtualFile.isValid) {
+                    LOG.warn(
+                        "Skipping file with invalid " +
+                            "VirtualFile: ${file.name}"
+                    )
+                    return@mapNotNull null
+                }
                 try {
-                    val relativePath = calculateRelativePath(rootDirectory, file)
-                    "export './$relativePath';"
-                } catch (_: Exception) {
+                    val relativePath = calculateRelativePath(
+                        rootDirectory,
+                        file,
+                    )
+                    if (relativePath.isBlank()) {
+                        LOG.warn(
+                            "Empty relative path for: " +
+                                file.name
+                        )
+                        null
+                    } else {
+                        "export './$relativePath';"
+                    }
+                } catch (e: Exception) {
+                    LOG.warn(
+                        "Failed to calculate relative path " +
+                            "for: ${file.name}",
+                        e,
+                    )
                     null
                 }
             }
@@ -157,67 +266,123 @@ class DartBarrelService(project: Project) {
     }
 
     /**
-     * Calculates the relative path between directory and file
+     * Calculates the relative path between directory and file.
      */
-    private fun calculateRelativePath(rootDirectory: PsiDirectory, file: PsiFile): String {
-        val rootPath = rootDirectory.virtualFile.toNioPath()
-        val filePath = file.virtualFile.toNioPath()
-        return rootPath.relativize(filePath).toString().replace("\\", "/")
+    private fun calculateRelativePath(
+        rootDirectory: PsiDirectory,
+        file: PsiFile,
+    ): String {
+        val rootVf = rootDirectory.virtualFile
+        val fileVf = file.virtualFile
+
+        requireNotNull(rootVf) {
+            "Root directory VirtualFile is null"
+        }
+        requireNotNull(fileVf) {
+            "File VirtualFile is null for ${file.name}"
+        }
+
+        val rootPath = rootVf.path
+        val filePath = fileVf.path
+
+        if (!filePath.startsWith(rootPath)) {
+            LOG.warn(
+                "File '$filePath' is not under " +
+                    "root '$rootPath'"
+            )
+            return fileVf.name
+        }
+
+        val relative = filePath
+            .removePrefix(rootPath)
+            .removePrefix("/")
+
+        return relative.replace("\\", "/")
     }
 
     /**
-     * Finds the existing barrel file in directory
+     * Finds the existing barrel file in directory.
      */
-    private fun findExistingBarrelFile(directory: PsiDirectory, barrelFileName: String): PsiFile? {
+    private fun findExistingBarrelFile(
+        directory: PsiDirectory,
+        barrelFileName: String,
+    ): PsiFile? {
         return directory.files.find { it.name == barrelFileName }
     }
 
     /**
-     * Updates existing barrel file content
+     * Updates existing barrel file content.
      */
-    private fun updateExistingBarrelFile(barrelFile: PsiFile, content: String): PsiFile {
+    private fun updateExistingBarrelFile(
+        barrelFile: PsiFile,
+        content: String,
+    ): PsiFile {
         val virtualFile = barrelFile.virtualFile
-        val document = fileDocumentManager.getDocument(virtualFile)
+        val document =
+            fileDocumentManager.getDocument(virtualFile)
 
         if (document != null) {
             document.setText(content)
             fileDocumentManager.saveDocument(document)
+        } else {
+            LOG.warn(
+                "Could not get document for: " +
+                    "${barrelFile.name}, writing via VFS"
+            )
+            virtualFile.setBinaryContent(
+                content.toByteArray(Charsets.UTF_8)
+            )
         }
 
-        // Refresh the virtual file to ensure the IDE sees the changes
         virtualFile.refresh(false, false)
-
         return barrelFile
     }
 
     /**
-     * Creates the new barrel file
+     * Creates the new barrel file.
      */
     private fun createNewBarrelFile(
         directory: PsiDirectory,
         barrelFileName: String,
         content: String
     ): PsiFile? {
-        val createdFile = DartFileUtils.createDartFile(directory, barrelFileName, content)
+        val createdFile = DartFileUtils.createDartFile(
+            directory,
+            barrelFileName,
+            content,
+        )
 
-        // Ensure the file is properly refreshed and visible to the IDE
-        createdFile?.virtualFile?.refresh(false, false)
+        if (createdFile == null) {
+            LOG.error(
+                "DartFileUtils.createDartFile returned null " +
+                    "for '$barrelFileName'"
+            )
+            return null
+        }
 
+        createdFile.virtualFile?.refresh(false, false)
         return createdFile
     }
 
     /**
-     * Normalizes content for comparison by removing comments and empty lines
+     * Normalizes content for comparison by removing
+     * comments and empty lines.
      */
     private fun normalizeContent(content: String): String {
         return content.lines()
             .map { it.trim() }
             .filter { line ->
                 line.isNotEmpty() &&
-                        !line.startsWith("//") &&
-                        !line.startsWith("/*") &&
-                        !line.startsWith("*")
+                    !line.startsWith("//") &&
+                    !line.startsWith("/*") &&
+                    !line.startsWith("*")
             }
             .joinToString("\n")
+    }
+
+    companion object {
+        private val LOG = Logger.getInstance(
+            DartBarrelService::class.java,
+        )
     }
 }
