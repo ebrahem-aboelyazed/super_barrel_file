@@ -4,6 +4,8 @@
     <name>Dart Barrel Manager</name>
     <vendor email="ebrahem6076@gmail.com">Dart Barrel Team</vendor>
 
+    <resource-bundle>messages.MyBundle</resource-bundle>
+
     <description><![CDATA[
         A comprehensive plugin for managing Dart barrel files in Flutter/Dart projects.
         Automatically generates and maintains barrel files with smart export management.
@@ -29,7 +31,9 @@
         <notificationGroup
                 id="Dart Barrel Plugin"
                 displayType="BALLOON"
-                isLogByDefault="true"/>
+                isLogByDefault="true"
+                key="notificationGroup.dartBarrelPlugin"
+                bundle="messages.MyBundle"/>
 
         <applicationService serviceImplementation="com.dartbarrel.plugin.settings.DartBarrelSettings"/>
 
@@ -37,59 +41,39 @@
                 parentId="language"
                 instance="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
                 id="com.dartbarrel.plugin.settings.DartBarrelConfigurable"
-                displayName="Dart Barrel Manager"/>
-
-        <!-- File listeners -->
+                key="configurable.displayName.dartBarrelManager"
+                bundle="messages.MyBundle"/>
 
         <!-- Inspections -->
-        <!-- <localInspection
-                 language="Dart"
-                 displayName="Missing Barrel File"
-                 groupName="Dart Barrel"
-                 enabledByDefault="true"
-                 level="WEAK WARNING"
-                 implementationClass="com.dartbarrel.plugin.inspections.MissingBarrelInspection"/>-->
 
         <localInspection
                 language="Dart"
-                displayName="Outdated Barrel File"
-                groupName="Dart Barrel"
+                key="inspection.outdatedBarrelFile.displayName"
+                groupKey="inspection.dartBarrel.groupName"
+                bundle="messages.MyBundle"
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.dartbarrel.plugin.inspections.OutdatedBarrelInspection"/>
 
-        <!-- Tool window -->
-        <toolWindow id="Dart Barrel"
-                    anchor="right"
-                    icon="/icons/dartBarrelToolWindow.svg"
-                    factoryClass="com.dartbarrel.plugin.toolwindow.DartBarrelToolWindowFactory"/>
     </extensions>
 
-    <actions>
+    <actions resource-bundle="messages.MyBundle">
         <action id="com.dartbarrel.plugin.actions.GenerateBarrelAction"
                 class="com.dartbarrel.plugin.actions.GenerateBarrelAction"
-                text="Barrel File"
-                description="Generate a Dart barrel file"
                 icon="DartIcons.Dart_file">
             <add-to-group group-id="NewGroup" anchor="last"/>
         </action>
 
         <action id="DartBarrel.RegenerateBarrel"
-                class="com.dartbarrel.plugin.actions.RegenerateBarrelAction"
-                text="Refresh Barrel File"
-                description="Regenerate existing barrel file">
+                class="com.dartbarrel.plugin.actions.RegenerateBarrelAction">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="after"
                           relative-to-action="com.dartbarrel.plugin.actions.GenerateBarrelAction"/>
         </action>
 
-
         <action id="DartBarrel.Settings"
-                class="com.dartbarrel.plugin.actions.SettingsAction"
-                text="Barrel File Settings"
-                description="Configure barrel file generation settings">
+                class="com.dartbarrel.plugin.actions.SettingsAction">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
-
 
     </actions>
 
