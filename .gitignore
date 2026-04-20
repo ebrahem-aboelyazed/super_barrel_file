@@ -2,4 +2,12 @@
 .idea
 .intellijPlatform
 .qodana
+.kotlin
+.run
 build
+out
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.log
+.DS_Store
