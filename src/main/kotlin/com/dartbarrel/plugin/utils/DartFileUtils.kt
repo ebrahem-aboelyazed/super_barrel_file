@@ -2,31 +2,15 @@ package com.dartbarrel.plugin.utils
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiManager
 import com.jetbrains.lang.dart.DartFileType
-import com.jetbrains.lang.dart.psi.DartClass
-import com.jetbrains.lang.dart.psi.DartExtensionDeclaration
-import com.jetbrains.lang.dart.psi.DartFile
-import com.jetbrains.lang.dart.psi.DartFunctionDeclarationWithBodyOrNative
 
 object DartFileUtils {
 
-    private val LOG = Logger.getInstance(
-        DartFileUtils::class.java,
-    )
-
-    /**
-     * Gets all direct Dart files in a directory (non-recursive)
-     */
-    fun getDartFiles(directory: PsiDirectory): List<PsiFile> {
-        return ApplicationManager.getApplication().runReadAction<List<PsiFile>> {
-            directory.files.filter { isDartFile(it) }
-        }
-    }
+    private val LOG = Logger.getInstance(DartFileUtils::class.java)
 
     /**
      * Gets all Dart files recursively in a directory
@@ -36,10 +20,7 @@ object DartFileUtils {
             val dartFiles = mutableListOf<PsiFile>()
 
             fun collectDartFiles(dir: PsiDirectory) {
-                // Add Dart files from current directory
                 dartFiles.addAll(dir.files.filter { isDartFile(it) })
-
-                // Recursively process subdirectories
                 dir.subdirectories.forEach { subdir ->
                     collectDartFiles(subdir)
                 }
@@ -82,7 +63,7 @@ object DartFileUtils {
         } catch (e: Exception) {
             LOG.error(
                 "Failed to create dart file '$fileName' " +
-                    "via PSI, trying VFS fallback",
+                        "via PSI, trying VFS fallback",
                 e,
             )
             try {
@@ -94,7 +75,7 @@ object DartFileUtils {
             } catch (e2: Exception) {
                 LOG.error(
                     "VFS fallback also failed for " +
-                        "'$fileName'",
+                            "'$fileName'",
                     e2,
                 )
                 null
@@ -128,16 +109,6 @@ object DartFileUtils {
     }
 
     /**
-     * Checks if a virtual file is a valid Dart file
-     */
-    fun isDartFile(virtualFile: VirtualFile): Boolean {
-        return virtualFile.fileType == DartFileType.INSTANCE &&
-                !virtualFile.name.startsWith(".") &&
-                !virtualFile.name.startsWith("_") &&
-                !isGeneratedFile(virtualFile.name)
-    }
-
-    /**
      * Checks if a file is generated (like .g.dart, .freezed.dart, etc.)
      */
     fun isGeneratedFile(fileName: String): Boolean {
@@ -148,119 +119,16 @@ object DartFileUtils {
                 fileName.endsWith(".part.dart")
     }
 
-    /**
-     * Checks if a Dart file has public declarations
-     */
-    fun hasPublicDeclarations(file: PsiFile): Boolean {
-        if (file !is DartFile) return false
 
-        return ApplicationManager.getApplication().runReadAction<Boolean> {
-            file.children.any { element ->
-                when (element) {
-                    is DartClass -> isPublicDeclaration(element.name)
-                    is DartFunctionDeclarationWithBodyOrNative -> isPublicDeclaration(element.name)
-                    is DartExtensionDeclaration -> isPublicDeclaration(element.name)
-                    else -> false
+    fun isPartFile(file: PsiFile): Boolean {
+        return ApplicationManager.getApplication()
+            .runReadAction<Boolean> {
+                val text = file.text ?: return@runReadAction false
+                text.lines().any { line ->
+                    val trimmed = line.trim()
+                    trimmed.startsWith("part of ") &&
+                            trimmed.endsWith(";")
                 }
             }
-        }
-    }
-
-    /**
-     * Gets all public element names from a Dart file
-     */
-    fun getPublicElements(file: PsiFile): List<String> {
-        if (file !is DartFile) return emptyList()
-
-        return ApplicationManager.getApplication().runReadAction<List<String>> {
-            val elements = mutableListOf<String>()
-
-            file.children.forEach { element ->
-                when (element) {
-                    is DartClass -> {
-                        element.name?.let { name ->
-                            if (isPublicDeclaration(name)) elements.add(name)
-                        }
-                    }
-
-                    is DartFunctionDeclarationWithBodyOrNative -> {
-                        element.name?.let { name ->
-                            if (isPublicDeclaration(name)) elements.add(name)
-                        }
-                    }
-
-                    is DartExtensionDeclaration -> {
-                        element.name?.let { name ->
-                            if (isPublicDeclaration(name)) elements.add(name)
-                        }
-                    }
-                }
-            }
-
-            elements
-        }
-    }
-
-    /**
-     * Gets all private element names from a Dart file
-     */
-    fun getPrivateElements(file: PsiFile): List<String> {
-        if (file !is DartFile) return emptyList()
-
-        return ApplicationManager.getApplication().runReadAction<List<String>> {
-            val elements = mutableListOf<String>()
-
-            file.children.forEach { element ->
-                when (element) {
-                    is DartClass -> {
-                        element.name?.let { name ->
-                            if (isPrivateDeclaration(name)) elements.add(name)
-                        }
-                    }
-
-                    is DartFunctionDeclarationWithBodyOrNative -> {
-                        element.name?.let { name ->
-                            if (isPrivateDeclaration(name)) elements.add(name)
-                        }
-                    }
-
-                    is DartExtensionDeclaration -> {
-                        element.name?.let { name ->
-                            if (isPrivateDeclaration(name)) elements.add(name)
-                        }
-                    }
-                }
-            }
-
-            elements
-        }
-    }
-
-    /**
-     * Gets all element names (public and private) from a Dart file
-     */
-    fun getAllElementNames(file: PsiFile): List<String> {
-        return getPublicElements(file) + getPrivateElements(file)
-    }
-
-    /**
-     * Checks if a declaration name is public (doesn't start with underscore)
-     */
-    private fun isPublicDeclaration(name: String?): Boolean {
-        return name != null && !name.startsWith("_")
-    }
-
-    /**
-     * Checks if a declaration name is private (starts with underscore)
-     */
-    private fun isPrivateDeclaration(name: String?): Boolean {
-        return name != null && name.startsWith("_")
-    }
-
-    /**
-     * Checks if a file is a private Dart file (name starts with underscore)
-     */
-    fun isPrivateFile(file: PsiFile): Boolean {
-        return file.name.startsWith("_")
     }
 }

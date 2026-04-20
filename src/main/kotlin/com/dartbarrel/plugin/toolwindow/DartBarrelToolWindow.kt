@@ -123,7 +123,6 @@ class DartBarrelToolWindow(private val project: Project) {
 
     fun getContent(): JComponent = toolWindowContent
 
-    // Optionally, you can define a custom cell renderer for the list
     private class BarrelFileListCellRenderer : DefaultListCellRenderer() {
         override fun getListCellRendererComponent(
             list: JList<*>,

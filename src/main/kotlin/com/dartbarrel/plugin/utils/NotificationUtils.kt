@@ -28,8 +28,4 @@ object NotificationUtils {
             .createNotification(title, content, NotificationType.ERROR)
             .notify(project)
     }
-
-    fun showSuccess(project: Project, title: String, content: String) {
-        showInfo(project, title, content)
-    }
 }

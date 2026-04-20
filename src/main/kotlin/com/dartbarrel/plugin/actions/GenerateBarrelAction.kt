@@ -102,7 +102,6 @@ class GenerateBarrelAction : AnAction() {
 
         e.presentation.isEnabledAndVisible = isEnabled
 
-        // Update the action text based on context
         if (isEnabled) {
             e.presentation.text = "Generate Barrel File"
             e.presentation.description = "Generate a barrel file for exporting Dart files"
