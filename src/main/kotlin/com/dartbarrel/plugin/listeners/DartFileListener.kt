@@ -38,10 +38,11 @@ class DartFileListener(
         event: VFileEvent,
     ): Boolean {
         val file = event.file ?: return false
+        val barrelService = project.service<DartBarrelService>()
         return file.fileType == DartFileType.INSTANCE &&
             !file.name.startsWith("_") &&
             !DartFileUtils.isGeneratedFile(file.name) &&
-            !isBarrelFile(file)
+            !barrelService.isBarrelFile(file)
     }
 
     private fun handleDartFileChange(event: VFileEvent) {
@@ -99,21 +100,6 @@ class DartFileListener(
         }
     }
 
-    private fun isBarrelFile(file: VirtualFile): Boolean {
-        val fileName = file.name
-        val defaultName = settings.barrelFileName
-
-        return when {
-            fileName == "index.dart" -> true
-            fileName == defaultName -> true
-            defaultName.contains("{folder_name}") -> {
-                val parentName =
-                    file.parent?.name ?: return false
-                fileName == "$parentName.dart"
-            }
-            else -> false
-        }
-    }
 
     companion object {
         private val LOG = Logger.getInstance(

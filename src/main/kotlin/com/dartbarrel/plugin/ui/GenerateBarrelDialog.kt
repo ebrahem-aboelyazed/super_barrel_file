@@ -1,15 +1,15 @@
 package com.dartbarrel.plugin.ui
 
+import com.dartbarrel.plugin.services.BarrelContentBuilder
 import com.dartbarrel.plugin.services.DartBarrelService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiFile
-import com.intellij.ui.components.JBList
+import com.intellij.ui.CheckBoxList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
-import java.awt.Component
 import java.awt.Dimension
 import java.awt.Font
 import javax.swing.*
@@ -21,29 +21,64 @@ class GenerateBarrelDialog(
     project: Project,
     private val directory: PsiDirectory,
     allFiles: List<PsiFile>,
-    private val barrelService: DartBarrelService
+    private val barrelService: DartBarrelService,
 ) : DialogWrapper(project) {
 
-    private val barrelFileName = barrelService.getBarrelFileName(directory)
-    private val filteredFiles = allFiles.filter { it.name != barrelFileName }
-    private val fileList = JBList(filteredFiles.map { it.name })
+    private val barrelFileName =
+        barrelService.getBarrelFileName(directory)
+    private val exportableItems =
+        barrelService.resolveExportableItems(directory)
+    private val checkBoxList = CheckBoxList<ExportEntry>()
     private val fileNameField = JTextField(barrelFileName)
     private val previewArea = JTextArea(8, 40)
 
     init {
         title = "Generate Barrel File"
-        fileList.setSelectionInterval(0, filteredFiles.size - 1)
+        setupCheckBoxList()
         previewArea.isEditable = false
         previewArea.font = Font("monospaced", Font.PLAIN, 12)
         updatePreview()
         init()
-        // Update preview on selection or file name change
-        fileList.addListSelectionListener { updatePreview() }
-        fileNameField.document.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent?) = updatePreview()
-            override fun removeUpdate(e: DocumentEvent?) = updatePreview()
-            override fun changedUpdate(e: DocumentEvent?) = updatePreview()
-        })
+
+        checkBoxList.setCheckBoxListListener { _, _ ->
+            updatePreview()
+        }
+        fileNameField.document.addDocumentListener(
+            object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent?) =
+                    updatePreview()
+
+                override fun removeUpdate(e: DocumentEvent?) =
+                    updatePreview()
+
+                override fun changedUpdate(e: DocumentEvent?) =
+                    updatePreview()
+            },
+        )
+    }
+
+    private fun setupCheckBoxList() {
+        exportableItems.forEach { item ->
+            val label = buildItemLabel(item)
+            val entry = ExportEntry(item, label)
+            checkBoxList.addItem(entry, entry.label, true)
+        }
+    }
+
+    private fun buildItemLabel(
+        item: BarrelContentBuilder.ExportableItem,
+    ): String {
+        val rootPath = directory.virtualFile.path
+        val filePath = item.file.virtualFile?.path ?: ""
+        val relative = filePath
+            .removePrefix(rootPath)
+            .removePrefix("/")
+
+        return if (item.isSubBarrel) {
+            "\uD83D\uDCC1 $relative (barrel)"
+        } else {
+            relative
+        }
     }
 
     override fun createCenterPanel(): JComponent {
@@ -51,14 +86,14 @@ class GenerateBarrelDialog(
         mainPanel.layout = BoxLayout(mainPanel, BoxLayout.Y_AXIS)
         mainPanel.border = JBUI.Borders.empty(12)
 
-        // Barrel file name group
         val namePanel = JPanel()
-        namePanel.layout = BoxLayout(namePanel, BoxLayout.X_AXIS)
+        namePanel.layout =
+            BoxLayout(namePanel, BoxLayout.X_AXIS)
         namePanel.border = BorderFactory.createTitledBorder(
             BorderFactory.createEtchedBorder(),
             "Barrel File Name",
             TitledBorder.LEADING,
-            TitledBorder.TOP
+            TitledBorder.TOP,
         )
         namePanel.add(Box.createHorizontalStrut(8))
         namePanel.add(JLabel("File name:"))
@@ -66,35 +101,29 @@ class GenerateBarrelDialog(
         namePanel.add(fileNameField)
         namePanel.add(Box.createHorizontalGlue())
 
-        // File selection group
         val filePanel = JPanel(BorderLayout())
         filePanel.border = BorderFactory.createTitledBorder(
             BorderFactory.createEtchedBorder(),
-            "Select Files to Export",
+            "Select Exports",
             TitledBorder.LEADING,
-            TitledBorder.TOP
+            TitledBorder.TOP,
         )
-        fileList.selectionMode = ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
-        fileList.visibleRowCount = 10
-        fileList.cellRenderer = FileListCellRenderer()
-        val scrollPane = JBScrollPane(fileList)
-        scrollPane.preferredSize = Dimension(500, 180)
+        val scrollPane = JBScrollPane(checkBoxList)
+        scrollPane.preferredSize = Dimension(500, 200)
         scrollPane.verticalScrollBar.unitIncrement = 16
         filePanel.add(scrollPane, BorderLayout.CENTER)
 
-        // Preview group
         val previewPanel = JPanel(BorderLayout())
         previewPanel.border = BorderFactory.createTitledBorder(
             BorderFactory.createEtchedBorder(),
             "Barrel File Preview",
             TitledBorder.LEADING,
-            TitledBorder.TOP
+            TitledBorder.TOP,
         )
         val previewScroll = JBScrollPane(previewArea)
         previewScroll.preferredSize = Dimension(500, 140)
         previewPanel.add(previewScroll, BorderLayout.CENTER)
 
-        // Add all groups to the main panel
         mainPanel.add(namePanel)
         mainPanel.add(Box.createVerticalStrut(12))
         mainPanel.add(filePanel)
@@ -104,42 +133,35 @@ class GenerateBarrelDialog(
         return mainPanel
     }
 
-    fun getSelectedFiles(): List<String> =
-        fileList.selectedValuesList
+    fun getSelectedFiles(): List<PsiFile> {
+        val selected = mutableListOf<PsiFile>()
+        for (i in 0 until checkBoxList.itemsCount) {
+            if (checkBoxList.isItemSelected(i)) {
+                val entry = checkBoxList.getItemAt(i)
+                if (entry != null) {
+                    selected.add(entry.item.file)
+                }
+            }
+        }
+        return selected
+    }
 
     fun getSelectedFileName(): String =
         fileNameField.text.trim()
 
     private fun updatePreview() {
-        val selectedNames = fileList.selectedValuesList
-        val selectedFiles = filteredFiles.filter { it.name in selectedNames }
-        val content = barrelService
-            .let {
-                val method = it::class.java.getDeclaredMethod(
-                    "buildBarrelContent",
-                    List::class.java,
-                    PsiDirectory::class.java
-                )
-                method.isAccessible = true
-                method.invoke(it, selectedFiles, directory) as String
-            }
+        val selectedFiles = getSelectedFiles()
+        val content = barrelService.buildPreviewContent(
+            selectedFiles,
+            directory,
+        )
         previewArea.text = content
     }
 
-    private class FileListCellRenderer : DefaultListCellRenderer() {
-        override fun getListCellRendererComponent(
-            list: JList<*>,
-            value: Any?,
-            index: Int,
-            isSelected: Boolean,
-            cellHasFocus: Boolean
-        ): Component {
-            val comp = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-            if (comp is JLabel && value is String) {
-                comp.icon = UIManager.getIcon("FileView.fileIcon")
-                comp.text = value
-            }
-            return comp
-        }
+    private data class ExportEntry(
+        val item: BarrelContentBuilder.ExportableItem,
+        val label: String,
+    ) {
+        override fun toString(): String = label
     }
 }

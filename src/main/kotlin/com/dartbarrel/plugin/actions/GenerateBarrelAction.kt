@@ -47,17 +47,15 @@ class GenerateBarrelAction : AnAction() {
         val dialog = GenerateBarrelDialog(project, psiDirectory, dartFiles, barrelService)
         if (!dialog.showAndGet()) return
 
-        val selectedFileNames = dialog.getSelectedFiles()
+        val selectedFiles = dialog.getSelectedFiles()
         val barrelFileName = dialog.getSelectedFileName()
 
-        val freshDartFiles = DartFileUtils
-            .getAllDartFilesRecursively(psiDirectory)
-        val selectedFiles = freshDartFiles.filter {
-            it.name in selectedFileNames && it.isValid
-        }
-
         if (selectedFiles.isEmpty()) {
-            NotificationUtils.showWarning(project, "No Files Selected", "Please select at least one file")
+            NotificationUtils.showWarning(
+                project,
+                "No Files Selected",
+                "Please select at least one file",
+            )
             return
         }
 
