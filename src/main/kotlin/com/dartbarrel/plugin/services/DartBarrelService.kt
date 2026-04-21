@@ -32,7 +32,7 @@ class DartBarrelService(project: Project) {
      * Generates a barrel file for all Dart files in the
      * given directory.
      */
-    fun generateBarrelFile(
+    /*fun generateBarrelFile(
         directory: PsiDirectory,
     ): PsiFile? {
         val dartFiles = readAction {
@@ -50,7 +50,7 @@ class DartBarrelService(project: Project) {
             dartFiles,
             barrelFileName,
         )
-    }
+    }*/
 
     /**
      * Generates a barrel file with custom file selection.
@@ -210,6 +210,7 @@ class DartBarrelService(project: Project) {
     private fun normalizeContent(content: String): String {
         return content.lines()
             .map { it.trim() }
+            .map { normalizeExportDirective(it) }
             .filter { line ->
                 line.isNotEmpty() &&
                     !line.startsWith("//") &&
@@ -219,10 +220,20 @@ class DartBarrelService(project: Project) {
             .joinToString("\n")
     }
 
+    private fun normalizeExportDirective(line: String): String {
+        val match = EXPORT_DIRECTIVE_REGEX.matchEntire(line) ?: return line
+        val quote = match.groupValues[1]
+        val rawPath = match.groupValues[2]
+        val normalizedPath = rawPath.removePrefix("./")
+        return "export $quote$normalizedPath$quote;"
+    }
+
     companion object {
         private val LOG = Logger.getInstance(
             DartBarrelService::class.java,
         )
+        private val EXPORT_DIRECTIVE_REGEX =
+            Regex("^export\\s+(['\"])([^'\"]+)\\1;")
 
         private fun <T> readAction(action: () -> T): T =
             ApplicationManager.getApplication()

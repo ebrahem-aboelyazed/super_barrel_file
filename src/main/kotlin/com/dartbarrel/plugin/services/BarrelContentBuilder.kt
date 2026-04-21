@@ -192,7 +192,7 @@ class BarrelContentBuilder(
                 )
                 null
             } else {
-                "export './$relativePath';"
+                "export '$relativePath';"
             }
         } catch (e: Exception) {
             LOG.warn(
