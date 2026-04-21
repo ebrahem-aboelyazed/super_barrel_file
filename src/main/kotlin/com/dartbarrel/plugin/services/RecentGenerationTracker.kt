@@ -3,40 +3,40 @@ package com.dartbarrel.plugin.services
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Suppresses immediate reprocessing of a directory right after a manual write.
+ * Suppresses immediate re-synchronisation of a directory right after a
+ * manual write so that the DartFileListener VFS
+ * event triggered by write does not re-enter the generation pipeline.
+ *
+ * All methods are thread-safe.
  */
 class RecentGenerationTracker(
     private val quietPeriodMillis: Long = DEFAULT_QUIET_PERIOD_MILLIS,
-    private val currentTimeMillis: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
 
-    private val generatedAtByPath = ConcurrentHashMap<String, Long>()
+    private val timestamps = ConcurrentHashMap<String, Long>()
 
-    /**
-     * Marks the given directory path as freshly generated.
-     */
-    fun mark(path: String) {
-        generatedAtByPath[path] = currentTimeMillis()
+    /** Records that [directoryPath] was just generated. */
+    fun mark(directoryPath: String) {
+        timestamps[directoryPath] = clock()
     }
 
     /**
-     * Returns whether the path was generated within the quiet period.
+     * Returns `true` when [directoryPath] was generated within the quiet
+     * period.  Expired entries are pruned lazily on every check.
      */
-    fun wasRecentlyGenerated(path: String): Boolean {
-        val now = currentTimeMillis()
+    fun wasRecentlyGenerated(directoryPath: String): Boolean {
+        val now = clock()
         pruneExpired(now)
-        val generatedAt = generatedAtByPath[path] ?: return false
-        return now - generatedAt <= quietPeriodMillis
+        val ts = timestamps[directoryPath] ?: return false
+        return now - ts <= quietPeriodMillis
     }
 
     private fun pruneExpired(now: Long) {
-        generatedAtByPath.entries.removeIf { (_, generatedAt) ->
-            now - generatedAt > quietPeriodMillis
-        }
+        timestamps.entries.removeIf { (_, ts) -> now - ts > quietPeriodMillis }
     }
 
     private companion object {
-        private const val DEFAULT_QUIET_PERIOD_MILLIS = 1500L
+        private const val DEFAULT_QUIET_PERIOD_MILLIS = 2_000L
     }
 }
-

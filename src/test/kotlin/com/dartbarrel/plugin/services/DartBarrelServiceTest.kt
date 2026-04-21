@@ -41,9 +41,10 @@ class DartBarrelServiceTest : BasePlatformTestCase() {
         )
 
         val generated = service.generateBarrelFile(
-            directory,
-            plan.candidates.map { it.relativePath }.toSet(),
-            plan.barrelFileName,
+            directory = directory,
+            plan = plan,
+            selectedRelativePaths = plan.candidates.map { it.relativePath }.toSet(),
+            barrelFileName = plan.barrelFileName,
         )
 
         assertNotNull(generated)
@@ -86,9 +87,10 @@ class DartBarrelServiceTest : BasePlatformTestCase() {
         val service = project.service<DartBarrelService>()
         val initialPlan = service.prepareGeneration(directory)
         service.generateBarrelFile(
-            directory,
-            initialPlan.candidates.map { it.relativePath }.toSet(),
-            initialPlan.barrelFileName,
+            directory = directory,
+            plan = initialPlan,
+            selectedRelativePaths = initialPlan.candidates.map { it.relativePath }.toSet(),
+            barrelFileName = initialPlan.barrelFileName,
         )
 
         createDartFile("lib/feature/baz.dart", "class Baz {}\n")

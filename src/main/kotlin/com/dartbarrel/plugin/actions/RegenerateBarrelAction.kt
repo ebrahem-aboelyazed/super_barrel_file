@@ -12,6 +12,11 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.psi.PsiManager
 
+/**
+ * Context-menu action that regenerates an existing barrel file from a fresh
+ * directory snapshot. Only visible when [DartBarrelService.isBarrelFile]
+ * returns `true` for the currently selected file.
+ */
 class RegenerateBarrelAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -22,33 +27,44 @@ class RegenerateBarrelAction : AnAction() {
         val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return
         val barrelService = project.service<DartBarrelService>()
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Regenerating barrel file", true) {
-            override fun run(indicator: ProgressIndicator) {
-                if (!psiFile.isValid) return
-                barrelService.regenerateBarrelFile(psiFile)
-                NotificationUtils.showInfo(
-                    project,
-                    "Barrel File Regenerated",
-                    "Regenerated ${psiFile.name}"
-                )
-            }
-        })
+        ProgressManager.getInstance().run(
+            object : Task.Backgroundable(
+                project,
+                "Regenerating barrel file…",
+                true,
+            ) {
+                override fun run(indicator: ProgressIndicator) {
+                    if (!psiFile.isValid) return
+                    runCatching { barrelService.regenerateBarrelFile(psiFile) }
+                        .onSuccess {
+                            NotificationUtils.showInfo(
+                                project,
+                                "Barrel File Regenerated",
+                                "Successfully regenerated '${psiFile.name}'.",
+                            )
+                        }
+                        .onFailure { ex ->
+                            NotificationUtils.showError(
+                                project,
+                                "Regeneration Failed",
+                                "Could not regenerate '${psiFile.name}': ${ex.message}",
+                            )
+                        }
+                }
+            },
+        )
     }
 
     override fun update(e: AnActionEvent) {
         val project = e.project
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
 
-        val isBarrel = project != null &&
-                virtualFile != null &&
-                !virtualFile.isDirectory &&
-                virtualFile.fileType.name == "Dart" &&
-                project.service<DartBarrelService>().isBarrelFile(virtualFile)
-
-        e.presentation.isEnabledAndVisible = isBarrel
+        e.presentation.isEnabledAndVisible = project != null &&
+            virtualFile != null &&
+            !virtualFile.isDirectory &&
+            virtualFile.fileType.name == "Dart" &&
+            project.service<DartBarrelService>().isBarrelFile(virtualFile)
     }
 
-    override fun getActionUpdateThread(): ActionUpdateThread {
-        return ActionUpdateThread.BGT
-    }
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

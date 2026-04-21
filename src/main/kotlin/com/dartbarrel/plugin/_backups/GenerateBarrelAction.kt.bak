@@ -13,15 +13,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 
-/**
- * Context-menu action that opens the barrel-generation dialog for the
- * selected directory and writes the barrel file.
- *
- * The [com.dartbarrel.plugin.model.BarrelGenerationPlan] produced for the
- * dialog is reused directly inside [DartBarrelService.generateBarrelFile] —
- * no second directory scan is performed — so the selected paths always match
- * the live plan and the barrel file is never written empty.
- */
 class GenerateBarrelAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -29,32 +20,23 @@ class GenerateBarrelAction : AnAction() {
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         if (!virtualFile.isDirectory) {
-            NotificationUtils.showWarning(
-                project,
-                "Invalid Selection",
-                "Please select a directory.",
-            )
+            NotificationUtils.showWarning(project, "Invalid Selection", "Please select a directory")
             return
         }
 
-        val psiDirectory = PsiManager.getInstance(project)
-            .findDirectory(virtualFile) ?: run {
-            NotificationUtils.showError(
-                project,
-                "Error",
-                "Could not access the selected directory.",
-            )
+        val psiDirectory = PsiManager.getInstance(project).findDirectory(virtualFile)
+        if (psiDirectory == null) {
+            NotificationUtils.showError(project, "Error", "Could not access directory")
             return
         }
 
         val barrelService = project.service<DartBarrelService>()
         val plan = barrelService.prepareGeneration(psiDirectory)
-
         if (plan.candidates.isEmpty()) {
             NotificationUtils.showWarning(
                 project,
                 "No Exportable Dart Files",
-                "No exportable Dart files were found in '${psiDirectory.name}'.",
+                "No exportable Dart files were found in the selected directory.",
             )
             return
         }
@@ -69,38 +51,37 @@ class GenerateBarrelAction : AnAction() {
             NotificationUtils.showWarning(
                 project,
                 "No Files Selected",
-                "Please select at least one file to export.",
+                "Please select at least one file",
             )
             return
         }
 
-        runCatching {
-            barrelService.generateBarrelFile(
-                directory = psiDirectory,
-                plan = plan,
-                selectedRelativePaths = selectedPaths,
-                barrelFileName = barrelFileName,
+        // Generate the barrel file
+        try {
+            val generatedFile = barrelService.generateBarrelFile(
+                psiDirectory,
+                selectedPaths,
+                barrelFileName
             )
-        }.onSuccess { generatedFile ->
+
             if (generatedFile != null) {
                 NotificationUtils.showInfo(
                     project,
-                    "Barrel File Generated",
-                    "Created '${generatedFile.name}' with " +
-                        "${selectedPaths.size} export(s) in '${psiDirectory.name}'.",
+                    "Success",
+                    "Generated barrel file '$barrelFileName' with ${selectedPaths.size} exports in '${psiDirectory.name}'"
                 )
             } else {
                 NotificationUtils.showError(
                     project,
                     "Generation Failed",
-                    "Failed to generate barrel file. Check the IDE logs for details.",
+                    "Failed to generate barrel file. Please check the logs for more details."
                 )
             }
-        }.onFailure { e ->
+        } catch (e: Exception) {
             NotificationUtils.showError(
                 project,
                 "Generation Error",
-                "Unexpected error: ${e.message}",
+                "Error generating barrel file: ${e.message}"
             )
         }
     }
@@ -109,32 +90,44 @@ class GenerateBarrelAction : AnAction() {
         val project = e.project
         val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
 
-        e.presentation.isEnabledAndVisible = project != null &&
-            virtualFile != null &&
-            virtualFile.isDirectory &&
-            isDartProject(project, virtualFile)
+        val isEnabled = project != null &&
+                virtualFile != null &&
+                virtualFile.isDirectory &&
+                isDartProject(project, virtualFile)
 
-        if (e.presentation.isEnabledAndVisible) {
+        e.presentation.isEnabledAndVisible = isEnabled
+
+        if (isEnabled) {
             e.presentation.text = "Generate Barrel File"
-            e.presentation.description =
-                "Generate a Dart barrel file for the selected directory"
+            e.presentation.description = "Generate a barrel file for exporting Dart files"
         }
     }
 
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-
-    private fun isDartProject(project: Project, directory: VirtualFile): Boolean {
-        if (hasPubspec(directory)) return true
-        val projectRoot = project.basePath
-            ?.let { LocalFileSystem.getInstance().findFileByPath(it) }
-            ?: return false
-        return hasPubspec(projectRoot)
+    override fun getActionUpdateThread(): ActionUpdateThread {
+        return ActionUpdateThread.BGT
     }
 
-    private fun hasPubspec(root: VirtualFile): Boolean {
+    /**
+     * Checks if the project is a Dart project by looking for pubspec.yaml
+     */
+    private fun isDartProject(project: Project, selectedDirectory: VirtualFile): Boolean {
+        if (containsPubspec(selectedDirectory)) {
+            return true
+        }
+
+        val basePath = project.basePath ?: return false
+        val projectRoot = LocalFileSystem.getInstance().findFileByPath(basePath)
+            ?: return false
+        return containsPubspec(projectRoot)
+    }
+
+
+    private fun containsPubspec(root: VirtualFile): Boolean {
         var current: VirtualFile? = root
         while (current != null) {
-            if (current.findChild("pubspec.yaml") != null) return true
+            if (current.findChild("pubspec.yaml") != null) {
+                return true
+            }
             current = current.parent
         }
         return false

@@ -7,25 +7,46 @@ import com.dartbarrel.plugin.utils.DartFileUtils
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiDirectory
 
 /**
- * Builds a stable snapshot of the files that can participate in a barrel.
+ * Produces a stable, deterministic [BarrelGenerationPlan] by walking the VFS
+ * tree synchronously inside a `runReadAction`.
+ *
+ * ### Algorithm
+ * 1. Collect all `.dart` files under [root] recursively (BFS, sorted by path).
+ * 2. Build a "nested barrel" list: any subdirectory whose canonical barrel
+ *    file already exists is exposed as a single re-export entry rather than
+ *    having all its children listed individually.
+ * 3. Exclude: the root barrel file itself, files already covered by a nested
+ *    barrel's export list, generated files, `part of` files, hidden/private
+ *    files, and user-configured regex patterns.
  */
 class BarrelSnapshotScanner(
     private val settings: DartBarrelSettings,
 ) {
 
     /**
-     * Creates a generation plan for the given directory.
+     * Creates a [BarrelGenerationPlan] for [directory].
+     * Must be called inside a read action.
      */
-    fun createPlan(directory: PsiDirectory): BarrelGenerationPlan {
+    fun createPlan(
+        directory: com.intellij.psi.PsiDirectory,
+    ): BarrelGenerationPlan {
         val root = directory.virtualFile
-        val barrelFileName = resolveBarrelFileName(directory.name)
-        val rootBarrelPath = root.resolveChildPath(barrelFileName)
+        return createPlanFromVirtualFile(root)
+    }
+
+    /**
+     * Creates a [BarrelGenerationPlan] from a [VirtualFile] root.
+     * Can be called directly when only a VirtualFile is available.
+     */
+    fun createPlanFromVirtualFile(root: VirtualFile): BarrelGenerationPlan {
+        val barrelFileName = resolveBarrelFileName(root.name)
+        val rootBarrelPath = "${root.path}/$barrelFileName"
+
         val nestedBarrels = findNestedBarrels(root)
-        val nestedBarrelPaths = nestedBarrels.mapTo(linkedSetOf()) { it.path }
-        val coveredPaths = nestedBarrels.flatMapTo(linkedSetOf()) {
+        val nestedBarrelPaths = nestedBarrels.mapTo(LinkedHashSet()) { it.path }
+        val coveredPaths = nestedBarrels.flatMapTo(LinkedHashSet()) {
             resolveCoveredPaths(it)
         }
 
@@ -34,94 +55,85 @@ class BarrelSnapshotScanner(
             .filter { it.path != rootBarrelPath }
             .filter { it.path !in nestedBarrelPaths }
             .filter { it.path !in coveredPaths }
-            .mapNotNull { file ->
-                toCandidate(root, file, isNestedBarrel = false)
-            }
+            .mapNotNull { toCandidate(root, it, isNestedBarrel = false) }
             .toList()
 
-        val nestedBarrelCandidates = nestedBarrels.mapNotNull { barrel ->
+        val nestedCandidates = nestedBarrels.mapNotNull { barrel ->
             toCandidate(root, barrel, isNestedBarrel = true)
         }
 
         return BarrelGenerationPlan(
             barrelFileName = barrelFileName,
-            candidates = (directCandidates + nestedBarrelCandidates)
+            candidates = (directCandidates + nestedCandidates)
                 .sortedBy { it.relativePath },
         )
     }
 
     /**
-     * Resolves the configured barrel file name for a directory.
+     * Resolves the barrel file name for the given [directoryName] using the
+     * current settings.
      */
-    fun resolveBarrelFileName(directoryName: String): String {
-        return when (val configuredName = settings.barrelFileName) {
+    fun resolveBarrelFileName(directoryName: String): String =
+        when (val configured = settings.barrelFileName) {
             FOLDER_NAME_PATTERN -> "$directoryName.dart"
-            else -> configuredName
+            else -> configured
         }
-    }
 
     private fun findNestedBarrels(root: VirtualFile): List<VirtualFile> {
-        val barrels = mutableListOf<VirtualFile>()
-        val stack = ArrayDeque<VirtualFile>()
+        val result = mutableListOf<VirtualFile>()
+        val queue = ArrayDeque<VirtualFile>()
+
         root.children
-            .filter(VirtualFile::isDirectory)
+            .filter { it.isValid && it.isDirectory }
             .sortedBy(VirtualFile::getPath)
-            .forEach(stack::addLast)
+            .forEach(queue::addLast)
 
-        while (stack.isNotEmpty()) {
-            val directory = stack.removeFirst()
-            if (!directory.isValid) {
-                continue
-            }
+        while (queue.isNotEmpty()) {
+            val dir = queue.removeFirst()
+            if (!dir.isValid) continue
 
-            directory.children
-                .filter(VirtualFile::isDirectory)
+            dir.children
+                .filter { it.isValid && it.isDirectory }
                 .sortedBy(VirtualFile::getPath)
-                .forEach(stack::addLast)
+                .forEach(queue::addLast)
 
-            directory.findChild(resolveBarrelFileName(directory.name))
-                ?.takeIf(::isBarrelCandidate)
-                ?.let(barrels::add)
+            dir.findChild(resolveBarrelFileName(dir.name))
+                ?.takeIf { it.isValid && !it.isDirectory && it.extension == DART_EXT }
+                ?.let(result::add)
         }
-
-        return barrels
+        return result
     }
 
     private fun collectDartFiles(root: VirtualFile): List<VirtualFile> {
-        val files = mutableListOf<VirtualFile>()
+        val result = mutableListOf<VirtualFile>()
         val stack = ArrayDeque<VirtualFile>()
         stack.addLast(root)
 
         while (stack.isNotEmpty()) {
             val current = stack.removeLast()
-            if (!current.isValid) {
-                continue
-            }
+            if (!current.isValid) continue
 
             current.children
+                .filter(VirtualFile::isValid)
                 .sortedBy(VirtualFile::getPath)
                 .forEach { child ->
                     when {
-                        !child.isValid -> Unit
                         child.isDirectory -> stack.addLast(child)
-                        isExportableDartFile(child) -> files.add(child)
+                        isExportableDartFile(child) -> result.add(child)
                     }
                 }
         }
-
-        return files
+        return result
     }
 
     private fun resolveCoveredPaths(barrelFile: VirtualFile): Set<String> {
         val parent = barrelFile.parent ?: return emptySet()
-        val text = safeText(barrelFile)
+        val text = safeReadText(barrelFile)
 
         return EXPORT_REGEX.findAll(text)
             .mapNotNull { match ->
-                val relativePath = match.groupValues[2]
-                    .removePrefix("./")
-                VfsUtilCore.findRelativeFile(relativePath, parent)
-                    ?.path
+                val relativePath = match.groupValues[2].removePrefix("./")
+                VfsUtilCore.findRelativeFile(relativePath, parent)?.path
             }
             .toSet()
     }
@@ -133,72 +145,49 @@ class BarrelSnapshotScanner(
     ): BarrelExportCandidate? {
         val relativePath = VfsUtilCore.getRelativePath(file, root, '/')
         if (relativePath.isNullOrBlank()) {
-            LOG.warn("Failed to resolve relative path for ${file.path}")
+            LOG.warn("Could not resolve relative path for ${file.path}")
             return null
         }
-
-        return BarrelExportCandidate(
-            relativePath = relativePath,
-            isNestedBarrel = isNestedBarrel,
-        )
+        return BarrelExportCandidate(relativePath, isNestedBarrel)
     }
 
     private fun isExportableDartFile(file: VirtualFile): Boolean {
-        if (file.extension != DART_EXTENSION) {
-            return false
-        }
-
-        return !file.name.startsWith('.') &&
-            !file.name.startsWith('_') &&
-            !DartFileUtils.isGeneratedFile(file.name) &&
-            !matchesExcludePattern(file.name) &&
+        if (file.extension != DART_EXT) return false
+        val name = file.name
+        return !name.startsWith('.') &&
+            !name.startsWith('_') &&
+            !DartFileUtils.isGeneratedFile(name) &&
+            !matchesExcludePattern(name) &&
             !isPartFile(file)
     }
 
-    private fun isBarrelCandidate(file: VirtualFile): Boolean {
-        return file.isValid &&
-            !file.isDirectory &&
-            file.extension == DART_EXTENSION
-    }
-
-    private fun isPartFile(file: VirtualFile): Boolean {
-        return safeText(file)
+    private fun isPartFile(file: VirtualFile): Boolean =
+        safeReadText(file)
             .lineSequence()
             .map(String::trim)
-            .any { line ->
-                line.startsWith("part of ") && line.endsWith(';')
-            }
-    }
+            .any { it.startsWith("part of ") && it.endsWith(';') }
 
-    private fun matchesExcludePattern(fileName: String): Boolean {
-        return settings.excludePatterns.any { pattern ->
+    private fun matchesExcludePattern(fileName: String): Boolean =
+        settings.excludePatterns.any { pattern ->
             runCatching { Regex(pattern) }
-                .onFailure { error ->
-                    LOG.warn("Ignoring invalid exclude pattern: $pattern", error)
+                .onFailure { e ->
+                    LOG.warn("Ignoring invalid exclude pattern '$pattern'", e)
                 }
                 .getOrNull()
                 ?.matches(fileName)
                 ?: false
         }
-    }
 
-    private fun safeText(file: VirtualFile): String {
-        return runCatching { VfsUtilCore.loadText(file) }
-            .getOrElse { error ->
-                LOG.warn("Failed to read ${file.path}", error)
-                ""
-            }
-    }
-
-    private fun VirtualFile.resolveChildPath(fileName: String): String =
-        "$path/$fileName"
+    private fun safeReadText(file: VirtualFile): String =
+        runCatching { VfsUtilCore.loadText(file) }
+            .onFailure { e -> LOG.warn("Could not read ${file.path}", e) }
+            .getOrDefault("")
 
     private companion object {
-        private const val DART_EXTENSION = "dart"
+        private const val DART_EXT = "dart"
         private const val FOLDER_NAME_PATTERN = "{folder_name}.dart"
         private val LOG = Logger.getInstance(BarrelSnapshotScanner::class.java)
         private val EXPORT_REGEX =
-            Regex("^export\\s+(['\"])([^'\"]+)\\1;", RegexOption.MULTILINE)
+            Regex("""^export\s+(['"])([^'"]+)\1;""", RegexOption.MULTILINE)
     }
 }
-
