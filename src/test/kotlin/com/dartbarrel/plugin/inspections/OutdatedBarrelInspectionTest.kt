@@ -83,5 +83,70 @@ class OutdatedBarrelInspectionTest : BasePlatformTestCase() {
             detector.isBarrelFile(regularFile),
         )
     }
+
+    fun testFileWithMatchingNameButNonBarrelContentNotDetected() {
+        val settings = DartBarrelSettings.getInstance().apply {
+            barrelFileName = "{folder_name}.dart"
+        }
+
+        val detector = BarrelFileDetector(
+            PsiManager.getInstance(project),
+            settings,
+        )
+
+        myFixture.tempDirFixture.createFile(
+            "lib/feature/feature.dart",
+            "class Feature {\n  void doSomething() {}\n}\n",
+        )
+        val file = myFixture.findFileInTempDir("lib/feature/feature.dart")
+
+        assertFalse(
+            "Should not detect feature.dart as barrel " +
+                "just because name matches folder, " +
+                "content must be export-only",
+            detector.isBarrelFile(file),
+        )
+    }
+
+    fun testEmptyFileNotDetected() {
+        val settings = DartBarrelSettings.getInstance().apply {
+            barrelFileName = "{folder_name}.dart"
+        }
+
+        val detector = BarrelFileDetector(
+            PsiManager.getInstance(project),
+            settings,
+        )
+
+        myFixture.tempDirFixture.createFile("lib/feature/feature.dart", "")
+        val file = myFixture.findFileInTempDir("lib/feature/feature.dart")
+
+        assertFalse(
+            "Should not detect empty file as barrel",
+            detector.isBarrelFile(file),
+        )
+    }
+
+    fun testFileWithOnlyCommentsNotDetected() {
+        val settings = DartBarrelSettings.getInstance().apply {
+            barrelFileName = "{folder_name}.dart"
+        }
+
+        val detector = BarrelFileDetector(
+            PsiManager.getInstance(project),
+            settings,
+        )
+
+        myFixture.tempDirFixture.createFile(
+            "lib/feature/feature.dart",
+            "// This is a comment\n// Another comment\n",
+        )
+        val file = myFixture.findFileInTempDir("lib/feature/feature.dart")
+
+        assertFalse(
+            "Should not detect comment-only file as barrel",
+            detector.isBarrelFile(file),
+        )
+    }
 }
 
