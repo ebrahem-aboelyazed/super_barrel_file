@@ -68,7 +68,7 @@ class DartBarrelService(project: Project) {
 
         return try {
             WriteAction.compute<PsiFile?, Exception> {
-                val content = contentBuilder.build(
+                val content = contentBuilder.buildFromSelection(
                     validFiles,
                     directory,
                 )
