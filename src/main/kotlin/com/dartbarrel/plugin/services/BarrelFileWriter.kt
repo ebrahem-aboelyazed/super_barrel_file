@@ -3,23 +3,45 @@ package com.dartbarrel.plugin.services
 import com.dartbarrel.plugin.utils.DartFileUtils
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiFileFactory
+import com.jetbrains.lang.dart.DartFileType
 
 class BarrelFileWriter(
+    project: com.intellij.openapi.project.Project,
     private val fileDocumentManager: FileDocumentManager,
 ) {
+
+    private val psiDocumentManager = PsiDocumentManager.getInstance(project)
+    private val psiFileFactory = PsiFileFactory.getInstance(project)
+
+    fun createOrUpdate(
+        directory: PsiDirectory,
+        barrelFileName: String,
+        content: String,
+    ): PsiFile? {
+        val existing = directory.findFile(barrelFileName)
+        return if (existing != null) {
+            writeToExisting(existing, content)
+        } else {
+            createNew(directory, barrelFileName, content)
+        }
+    }
 
     fun writeToExisting(
         barrelFile: PsiFile,
         content: String,
     ): PsiFile {
-        val virtualFile = barrelFile.virtualFile
+        val virtualFile = barrelFile.virtualFile ?: return barrelFile
         val document =
-            fileDocumentManager.getDocument(virtualFile)
+            psiDocumentManager.getDocument(barrelFile)
+                ?: fileDocumentManager.getDocument(virtualFile)
 
         if (document != null) {
             document.setText(content)
+            psiDocumentManager.commitDocument(document)
             fileDocumentManager.saveDocument(document)
         } else {
             LOG.warn(
@@ -40,11 +62,24 @@ class BarrelFileWriter(
         barrelFileName: String,
         content: String,
     ): PsiFile? {
-        val createdFile = DartFileUtils.createDartFile(
-            directory,
-            barrelFileName,
-            content,
-        )
+        val createdFile = runCatching {
+            val file = psiFileFactory.createFileFromText(
+                barrelFileName,
+                DartFileType.INSTANCE,
+                content,
+            )
+            directory.add(file) as? PsiFile
+        }.getOrElse { error ->
+            LOG.warn(
+                "PSI file creation failed for '$barrelFileName', using fallback",
+                error,
+            )
+            DartFileUtils.createDartFile(
+                directory,
+                barrelFileName,
+                content,
+            )
+        }
 
         if (createdFile == null) {
             LOG.error(
@@ -52,6 +87,12 @@ class BarrelFileWriter(
                     "for '$barrelFileName'"
             )
             return null
+        }
+
+        val document = psiDocumentManager.getDocument(createdFile)
+        if (document != null) {
+            psiDocumentManager.commitDocument(document)
+            fileDocumentManager.saveDocument(document)
         }
 
         createdFile.virtualFile?.refresh(false, false)

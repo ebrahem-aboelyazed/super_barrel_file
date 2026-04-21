@@ -2,7 +2,6 @@ package com.dartbarrel.plugin.actions
 
 import com.dartbarrel.plugin.services.DartBarrelService
 import com.dartbarrel.plugin.ui.GenerateBarrelDialog
-import com.dartbarrel.plugin.utils.DartFileUtils
 import com.dartbarrel.plugin.utils.NotificationUtils
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -11,6 +10,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 
 class GenerateBarrelAction : AnAction() {
@@ -30,27 +30,24 @@ class GenerateBarrelAction : AnAction() {
             return
         }
 
-        // Get all Dart files in the directory
-        val dartFiles = DartFileUtils.getAllDartFilesRecursively(psiDirectory)
-        if (dartFiles.isEmpty()) {
+        val barrelService = project.service<DartBarrelService>()
+        val plan = barrelService.prepareGeneration(psiDirectory)
+        if (plan.candidates.isEmpty()) {
             NotificationUtils.showWarning(
                 project,
-                "No Dart Files",
-                "No Dart files found in the selected directory and its subdirectories."
+                "No Exportable Dart Files",
+                "No exportable Dart files were found in the selected directory.",
             )
             return
         }
 
-        val barrelService = project.service<DartBarrelService>()
-
-        // Show dialog for file selection
-        val dialog = GenerateBarrelDialog(project, psiDirectory, dartFiles, barrelService)
+        val dialog = GenerateBarrelDialog(project, plan, barrelService)
         if (!dialog.showAndGet()) return
 
-        val selectedFiles = dialog.getSelectedFiles()
+        val selectedPaths = dialog.getSelectedRelativePaths()
         val barrelFileName = dialog.getSelectedFileName()
 
-        if (selectedFiles.isEmpty()) {
+        if (selectedPaths.isEmpty()) {
             NotificationUtils.showWarning(
                 project,
                 "No Files Selected",
@@ -61,9 +58,9 @@ class GenerateBarrelAction : AnAction() {
 
         // Generate the barrel file
         try {
-            val generatedFile = barrelService.generateBarrelFileWithCustomSelection(
+            val generatedFile = barrelService.generateBarrelFile(
                 psiDirectory,
-                selectedFiles,
+                selectedPaths,
                 barrelFileName
             )
 
@@ -71,7 +68,7 @@ class GenerateBarrelAction : AnAction() {
                 NotificationUtils.showInfo(
                     project,
                     "Success",
-                    "Generated barrel file '$barrelFileName' with ${selectedFiles.size} exports in '${psiDirectory.name}'"
+                    "Generated barrel file '$barrelFileName' with ${selectedPaths.size} exports in '${psiDirectory.name}'"
                 )
             } else {
                 NotificationUtils.showError(
@@ -96,7 +93,7 @@ class GenerateBarrelAction : AnAction() {
         val isEnabled = project != null &&
                 virtualFile != null &&
                 virtualFile.isDirectory &&
-                isDartProject(project)
+                isDartProject(project, virtualFile)
 
         e.presentation.isEnabledAndVisible = isEnabled
 
@@ -113,9 +110,26 @@ class GenerateBarrelAction : AnAction() {
     /**
      * Checks if the project is a Dart project by looking for pubspec.yaml
      */
-    private fun isDartProject(project: Project): Boolean {
+    private fun isDartProject(project: Project, selectedDirectory: VirtualFile): Boolean {
+        if (containsPubspec(selectedDirectory)) {
+            return true
+        }
+
         val basePath = project.basePath ?: return false
-        val projectRoot = LocalFileSystem.getInstance().findFileByPath(basePath) ?: return false
-        return projectRoot.findChild("pubspec.yaml") != null
+        val projectRoot = LocalFileSystem.getInstance().findFileByPath(basePath)
+            ?: return false
+        return containsPubspec(projectRoot)
+    }
+
+
+    private fun containsPubspec(root: VirtualFile): Boolean {
+        var current: VirtualFile? = root
+        while (current != null) {
+            if (current.findChild("pubspec.yaml") != null) {
+                return true
+            }
+            current = current.parent
+        }
+        return false
     }
 }

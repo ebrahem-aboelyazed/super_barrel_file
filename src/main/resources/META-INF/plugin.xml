@@ -61,7 +61,7 @@
         <action id="com.dartbarrel.plugin.actions.GenerateBarrelAction"
                 class="com.dartbarrel.plugin.actions.GenerateBarrelAction"
                 icon="DartIcons.Dart_file">
-            <add-to-group group-id="NewGroup" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
 
         <action id="DartBarrel.RegenerateBarrel"

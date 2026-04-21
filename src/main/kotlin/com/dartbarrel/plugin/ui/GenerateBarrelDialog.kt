@@ -1,11 +1,11 @@
 package com.dartbarrel.plugin.ui
 
-import com.dartbarrel.plugin.services.BarrelContentBuilder
+import com.dartbarrel.plugin.model.BarrelExportCandidate
+import com.dartbarrel.plugin.model.BarrelGenerationPlan
 import com.dartbarrel.plugin.services.DartBarrelService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.psi.PsiDirectory
-import com.intellij.psi.PsiFile
 import com.intellij.ui.CheckBoxList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
@@ -19,17 +19,12 @@ import javax.swing.event.DocumentListener
 
 class GenerateBarrelDialog(
     project: Project,
-    private val directory: PsiDirectory,
-    allFiles: List<PsiFile>,
+    private val plan: BarrelGenerationPlan,
     private val barrelService: DartBarrelService,
 ) : DialogWrapper(project) {
 
-    private val barrelFileName =
-        barrelService.getBarrelFileName(directory)
-    private val exportableItems =
-        barrelService.resolveExportableItems(directory)
     private val checkBoxList = CheckBoxList<ExportEntry>()
-    private val fileNameField = JTextField(barrelFileName)
+    private val fileNameField = JTextField(plan.barrelFileName)
     private val previewArea = JTextArea(8, 40)
 
     init {
@@ -58,7 +53,7 @@ class GenerateBarrelDialog(
     }
 
     private fun setupCheckBoxList() {
-        exportableItems.forEach { item ->
+        plan.candidates.forEach { item ->
             val label = buildItemLabel(item)
             val entry = ExportEntry(item, label)
             checkBoxList.addItem(entry, entry.label, true)
@@ -66,18 +61,12 @@ class GenerateBarrelDialog(
     }
 
     private fun buildItemLabel(
-        item: BarrelContentBuilder.ExportableItem,
+        item: BarrelExportCandidate,
     ): String {
-        val rootPath = directory.virtualFile.path
-        val filePath = item.file.virtualFile?.path ?: ""
-        val relative = filePath
-            .removePrefix(rootPath)
-            .removePrefix("/")
-
-        return if (item.isSubBarrel) {
-            "\uD83D\uDCC1 $relative (barrel)"
+        return if (item.isNestedBarrel) {
+            "\uD83D\uDCC1 ${item.relativePath} (barrel)"
         } else {
-            relative
+            item.relativePath
         }
     }
 
@@ -133,13 +122,13 @@ class GenerateBarrelDialog(
         return mainPanel
     }
 
-    fun getSelectedFiles(): List<PsiFile> {
-        val selected = mutableListOf<PsiFile>()
+    fun getSelectedRelativePaths(): Set<String> {
+        val selected = linkedSetOf<String>()
         for (i in 0 until checkBoxList.itemsCount) {
             if (checkBoxList.isItemSelected(i)) {
                 val entry = checkBoxList.getItemAt(i)
                 if (entry != null) {
-                    selected.add(entry.item.file)
+                    selected.add(entry.item.relativePath)
                 }
             }
         }
@@ -149,17 +138,32 @@ class GenerateBarrelDialog(
     fun getSelectedFileName(): String =
         fileNameField.text.trim()
 
+    override fun doValidate(): ValidationInfo? {
+        val fileName = getSelectedFileName()
+        return when {
+            fileName.isBlank() -> ValidationInfo(
+                "Please enter a barrel file name.",
+                fileNameField,
+            )
+            !fileName.endsWith(".dart") -> ValidationInfo(
+                "Barrel files must use the .dart extension.",
+                fileNameField,
+            )
+            else -> null
+        }
+    }
+
     private fun updatePreview() {
-        val selectedFiles = getSelectedFiles()
+        val selectedFiles = getSelectedRelativePaths()
         val content = barrelService.buildPreviewContent(
+            plan,
             selectedFiles,
-            directory,
         )
         previewArea.text = content
     }
 
     private data class ExportEntry(
-        val item: BarrelContentBuilder.ExportableItem,
+        val item: BarrelExportCandidate,
         val label: String,
     ) {
         override fun toString(): String = label

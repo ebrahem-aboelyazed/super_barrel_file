@@ -3,7 +3,7 @@ package com.dartbarrel.plugin.listeners
 import com.dartbarrel.plugin.services.DartBarrelService
 import com.dartbarrel.plugin.settings.DartBarrelSettings
 import com.dartbarrel.plugin.utils.DartFileUtils
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -14,24 +14,46 @@ import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
-import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.jetbrains.lang.dart.DartFileType
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 class DartFileListener(
     private val project: Project,
 ) : BulkFileListener {
 
     private val settings = DartBarrelSettings.getInstance()
+    private val pendingDirectoryPaths = ConcurrentHashMap.newKeySet<String>()
+    private val flushSequence = AtomicLong()
 
     override fun after(events: MutableList<out VFileEvent>) {
         if (!settings.autoGenerate) return
         if (project.isDisposed) return
 
-        val dartEvents = events.filter(::isRelevantDartEvent)
-        if (dartEvents.isEmpty()) return
+        events.asSequence()
+            .filter(::isRelevantDartEvent)
+            .flatMap(::resolveAffectedDirectories)
+            .filter(VirtualFile::isValid)
+            .map(VirtualFile::getPath)
+            .forEach(pendingDirectoryPaths::add)
 
-        dartEvents.forEach(::handleDartFileChange)
+        if (pendingDirectoryPaths.isEmpty()) {
+            return
+        }
+
+        val currentSequence = flushSequence.incrementAndGet()
+        AppExecutorUtil.getAppScheduledExecutorService().schedule(
+            {
+                if (flushSequence.get() != currentSequence || project.isDisposed) {
+                    return@schedule
+                }
+                flushPendingDirectories()
+            },
+            REGENERATION_DELAY_MILLIS,
+            TimeUnit.MILLISECONDS,
+        )
     }
 
     private fun isRelevantDartEvent(
@@ -45,63 +67,58 @@ class DartFileListener(
             !barrelService.isBarrelFile(file)
     }
 
-    private fun handleDartFileChange(event: VFileEvent) {
-        if (project.isDisposed) return
-
-        val barrelService = project.service<DartBarrelService>()
-        val affectedDirs = mutableSetOf<VirtualFile>()
-
-        when (event) {
+    private fun resolveAffectedDirectories(
+        event: VFileEvent,
+    ): Sequence<VirtualFile> {
+        return when (event) {
             is VFileCreateEvent,
             is VFileDeleteEvent,
-            is VFileContentChangeEvent -> {
-                event.file?.parent?.let {
-                    affectedDirs.add(it)
-                }
-            }
-            is VFileMoveEvent -> {
-                affectedDirs.add(event.newParent)
-                affectedDirs.add(event.oldParent)
-            }
+            is VFileContentChangeEvent -> listOfNotNull(event.file?.parent)
+                .asSequence()
+            is VFileMoveEvent -> sequenceOf(
+                event.oldParent,
+                event.newParent,
+            )
+            else -> emptySequence()
+        }
+    }
+
+    private fun flushPendingDirectories() {
+        if (project.isDisposed) {
+            return
         }
 
-        for (dir in affectedDirs) {
-            if (!dir.isValid) continue
+        val paths = pendingDirectoryPaths.toList()
+        pendingDirectoryPaths.clear()
+        if (paths.isEmpty()) {
+            return
+        }
 
-            try {
-                val barrelFile = ApplicationManager
-                    .getApplication()
-                    .runReadAction<PsiFile?> {
-                        val psiDir = PsiManager
-                            .getInstance(project)
-                            .findDirectory(dir)
-                            ?: return@runReadAction null
+        DumbService.getInstance(project).smartInvokeLater {
+            if (project.isDisposed) {
+                return@smartInvokeLater
+            }
 
-                        psiDir.files.firstOrNull {
-                            it.isValid &&
-                                barrelService
-                                    .isBarrelFile(it)
-                        }
-                    } ?: continue
+            val barrelService = project.service<DartBarrelService>()
+            paths.forEach { path ->
+                val directory = com.intellij.openapi.vfs.LocalFileSystem
+                    .getInstance()
+                    .findFileByPath(path)
+                    ?: return@forEach
 
-                if (barrelService
-                        .needsRegeneration(barrelFile)
-                ) {
-                    barrelService
-                        .regenerateBarrelFile(barrelFile)
+                runCatching {
+                    barrelService.synchronizeExistingBarrel(directory)
+                }.onFailure { error ->
+                    LOG.warn("Failed to synchronize barrel for $path", error)
                 }
-            } catch (e: Exception) {
-                LOG.warn(
-                    "Error handling dart file change " +
-                        "in ${dir.path}",
-                    e,
-                )
             }
         }
     }
 
 
+
     companion object {
+        private const val REGENERATION_DELAY_MILLIS = 400L
         private val LOG = Logger.getInstance(
             DartFileListener::class.java,
         )
