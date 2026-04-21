@@ -116,12 +116,10 @@ class DartBarrelService(private val project: Project) {
         if (!barrelFile.isValid) return false
 
         val directory = barrelFile.containingDirectory ?: return false
-        val expected = prepareGeneration(directory)
-            .let { plan -> contentBuilder.build(plan.candidates) }
-
         return readAction {
-            normalizeContent(expected) !=
-                    normalizeContent(barrelFile.text)
+            val plan = snapshotScanner.createPlan(directory)
+            val expected = contentBuilder.build(plan.candidates)
+            normalizeContent(expected) != normalizeContent(barrelFile.text)
         }
     }
 
@@ -150,6 +148,12 @@ class DartBarrelService(private val project: Project) {
      */
     fun isBarrelFile(virtualFile: VirtualFile): Boolean =
         detector.isBarrelFile(virtualFile)
+
+    /**
+     * Checks if a PSI file is a barrel file.
+     */
+    fun isBarrelFile(psiFile: PsiFile): Boolean =
+        detector.isBarrelFile(psiFile)
 
     /**
      * Gets the barrel file name for a directory.

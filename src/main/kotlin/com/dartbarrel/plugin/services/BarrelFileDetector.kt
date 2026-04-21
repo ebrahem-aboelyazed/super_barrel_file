@@ -37,16 +37,14 @@ class BarrelFileDetector(
     ): Boolean {
         val fileName = virtualFile.name
         val defaultName = settings.barrelFileName
+        val parentName = virtualFile.parent?.name ?: return false
 
         return when {
             fileName == "index.dart" -> true
-            fileName == defaultName -> true
             defaultName.contains("{folder_name}") -> {
-                val parentName =
-                    virtualFile.parent?.name ?: return false
                 fileName == "$parentName.dart"
             }
-            else -> false
+            else -> fileName == defaultName
         }
     }
 
