@@ -132,6 +132,15 @@ tasks {
     publishPlugin {
         dependsOn(patchChangelog)
     }
+
+    // buildSearchableOptions launches a headless IDE process to index help
+    // topics. It fails with "Only one instance of IDEA can be run at a time"
+    // whenever IntelliJ is already open on the developer machine. The task
+    // is only required when publishing to the JetBrains Marketplace; it
+    // adds no value during local development or CI test runs.
+    buildSearchableOptions {
+        enabled = false
+    }
 }
 
 intellijPlatformTesting {

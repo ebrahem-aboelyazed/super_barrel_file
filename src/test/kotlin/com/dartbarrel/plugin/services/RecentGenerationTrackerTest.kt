@@ -11,7 +11,7 @@ class RecentGenerationTrackerTest {
         var now = 1_000L
         val tracker = RecentGenerationTracker(
             quietPeriodMillis = 500L,
-            currentTimeMillis = { now },
+            clock = { now },
         )
 
         tracker.mark("/tmp/lib/feature")

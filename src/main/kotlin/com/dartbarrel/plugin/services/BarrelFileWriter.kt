@@ -11,14 +11,22 @@ import com.intellij.psi.PsiManager
 /**
  * Handles all physical write operations for barrel files.
  *
- * New files are always created via VFS createChildData + setBinaryContent
- * to guarantee non-empty content on first generation. The old approach of
- * `PsiFileFactory.createFileFromText` followed by `PsiDirectory.add` was
- * unreliable: the in-memory PSI content was not guaranteed to be flushed to
- * the physical file, which caused blank barrel files on first creation.
+ * ### Why not `PsiFileFactory → PsiDirectory.add`?
+ * That legacy path creates a detached in-memory PSI node.  When `add()` is
+ * called, IntelliJ creates the physical file via VFS but does **not** copy the
+ * in-memory text — the file lands on disk empty.
  *
- * Existing files are updated through the document layer so that IntelliJ's
- * undo-manager, unsaved-changes indicators, and live templates stay in sync.
+ * ### Dual-write strategy
+ * Every write goes through two phases:
+ * 1. **VFS binary write** — `setBinaryContent` is a synchronous, platform-
+ *    agnostic write that guarantees the bytes are on the physical file system
+ *    before the action returns.  This is the source of truth.
+ * 2. **Document-cache reconciliation** — `document.setText` + `commitDocument`
+ *    brings the in-process PSI / editor layer into sync.  *No* call to
+ *    `FileDocumentManager.saveDocument` is made here: the content is already
+ *    on disk from phase 1.  On Android Studio, `saveDocument` inside a
+ *    `WriteCommandAction` can be dispatched to an async save queue, which is
+ *    exactly why the file can appear empty on first open.
  */
 class BarrelFileWriter(
     project: Project,
@@ -47,47 +55,44 @@ class BarrelFileWriter(
     }
 
     /**
-     * Overwrites [barrelFile]'s content via the document layer so that
-     * IntelliJ stays consistent with the underlying VFS.
+     * Overwrites [barrelFile]'s content.
+     * Phase 1 writes bytes to disk; phase 2 reconciles the document cache.
      */
     fun writeToExisting(
         barrelFile: PsiFile,
         content: String,
     ): PsiFile {
         val virtualFile = barrelFile.virtualFile ?: return barrelFile
+        val bytes = content.toByteArray(Charsets.UTF_8)
+
+        // Phase 1 — guaranteed on-disk write.
+        virtualFile.setBinaryContent(bytes)
+        virtualFile.refresh(false, false)
+
+        // Phase 2 — reconcile the in-process document cache.
         val document = psiDocumentManager.getDocument(barrelFile)
             ?: fileDocumentManager.getDocument(virtualFile)
 
         if (document != null) {
-            document.setText(content)
+            if (document.text != content) {
+                document.setText(content)
+            }
             psiDocumentManager.commitDocument(document)
-            fileDocumentManager.saveDocument(document)
-        } else {
-            LOG.warn(
-                "No document for '${barrelFile.name}'; " +
-                    "falling back to VFS binary write.",
-            )
-            virtualFile.setBinaryContent(content.toByteArray(Charsets.UTF_8))
         }
 
-        virtualFile.refresh(false, false)
         return barrelFile
     }
 
     /**
-     * Creates a new barrel file with [content].
+     * Creates a new barrel file.
+     * Phase 1 writes bytes to disk; phase 2 reconciles the document cache.
      *
-     * ### Why not `PsiFileFactory → PsiDirectory.add`?
-     * That legacy path creates a detached in-memory PSI node and hands it to
-     * the directory's `add` method.  IntelliJ creates the physical file via
-     * VFS but does **not** copy the in-memory text, leaving it empty on disk.
-     *
-     * ### Two-phase write (VFS + document layer)
-     * 1. `createChildData` — creates an empty physical file in the VFS.
-     * 2. `getDocument → setText` — writes the content through the IntelliJ
-     *    document/commit pipeline so both the on-disk file and the in-process
-     *    PSI document cache reflect the correct content immediately, in both
-     *    production and the light test VFS.
+     * `FileDocumentManager.saveDocument` is intentionally **not** called.
+     * On Android Studio the call is async inside a `WriteCommandAction` and
+     * the content never reaches disk before the file is opened, producing a
+     * blank file on every first generation.  `setBinaryContent` is always
+     * synchronous and is the only reliable disk-write API across all
+     * IntelliJ-platform hosts (IDEA, Android Studio, Fleet, etc.).
      */
     fun createNew(
         directory: PsiDirectory,
@@ -97,27 +102,29 @@ class BarrelFileWriter(
         val virtualDir = directory.virtualFile
 
         return try {
+            val bytes = content.toByteArray(Charsets.UTF_8)
+
+            // Phase 1 — create the file and write bytes to disk immediately.
             val vFile = virtualDir.createChildData(this, barrelFileName)
+            vFile.setBinaryContent(bytes)
             vFile.refresh(false, false)
 
+            // Phase 2 — reconcile the in-process document / PSI cache.
+            // commitDocument must be called unconditionally: even when
+            // setBinaryContent already updated the document text (e.g. in the
+            // light test VFS), the PSI tree is not re-parsed until a commit
+            // is issued, so psiFile.text would still be stale.
             val psiFile = psiManager.findFile(vFile) ?: return null
-
             val document = psiDocumentManager.getDocument(psiFile)
                 ?: fileDocumentManager.getDocument(vFile)
 
             if (document != null) {
-                document.setText(content)
+                if (document.text != content) {
+                    document.setText(content)
+                }
                 psiDocumentManager.commitDocument(document)
-                fileDocumentManager.saveDocument(document)
-            } else {
-                LOG.warn(
-                    "No document for new file '$barrelFileName'; " +
-                        "falling back to VFS binary write.",
-                )
-                vFile.setBinaryContent(content.toByteArray(Charsets.UTF_8))
             }
 
-            vFile.refresh(false, false)
             psiFile
         } catch (e: Exception) {
             LOG.error(
